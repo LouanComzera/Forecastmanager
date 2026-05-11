@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --bg-main: #0F172A;
+    --bg-card: #1E293B;
+    --bg-sidebar: #020617;
+    --primary: #3B82F6;
+    --primary-hover: #2563EB;
+    --secondary: #64748B;
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    --accent-red: #EF4444;
+    --accent-green: #22C55E;
+    --accent-orange: #F97316;
+    --border: #334155;
+    --font-sans: 'Fira Sans', sans-serif;
+    --font-mono: 'Fira Code', monospace;
+    --glow: 0 0 10px rgba(59, 130, 246, 0.2);
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+}
+
+.glow-on-hover:hover {
+  box-shadow: var(--glow);
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

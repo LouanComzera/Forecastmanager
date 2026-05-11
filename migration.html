@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Comzera Data Migration</title>
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: white; padding: 50px; text-align: center; }
+        .card { background: #1e293b; border-radius: 16px; padding: 40px; max-width: 500px; margin: 0 auto; border: 1px solid #334155; }
+        button { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        #status { margin-top: 20px; color: #94a3b8; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Strategy Suite Migration</h1>
+        <p>Transfer your data from LocalStorage to the new .NET SQLite backend.</p>
+        <button onclick="startMigration()">Start Migration</button>
+        <div id="status">Ready to migrate...</div>
+    </div>
+
+    <script>
+        async function startMigration() {
+            const status = document.getElementById('status');
+            status.innerText = "Checking local data...";
+
+            const expenses = JSON.parse(localStorage.getItem('expenses')) || {};
+            const companies = JSON.parse(localStorage.getItem('companies')) || [];
+            
+            if (companies.length === 0) {
+                status.innerText = "No data found in LocalStorage to migrate.";
+                return;
+            }
+
+            status.innerText = `Found ${companies.length} companies. Uploading...`;
+
+            try {
+                // 1. Upload Companies and get their IDs
+                const companyMap = {};
+                for (const name of companies) {
+                    const res = await fetch('http://localhost:5000/api/companies', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                    const data = await res.json();
+                    companyMap[name] = data.id;
+                }
+
+                status.innerText = "Companies migrated. Uploading expenses...";
+
+                // 2. Flatten and upload expenses
+                const allExpenses = [];
+                for (const month in expenses) {
+                    expenses[month].forEach(exp => {
+                        allExpenses.push({
+                            description: exp.description,
+                            amount: parseFloat(exp.amount) || 0,
+                            date: new Date(exp.date).toISOString(),
+                            isPaid: exp.paid || false,
+                            isFixed: exp.fixed || false,
+                            companyId: companyMap[exp.company]
+                        });
+                    });
+                }
+
+                if (allExpenses.length > 0) {
+                    await fetch('http://localhost:5000/api/expenses/bulk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(allExpenses)
+                    });
+                }
+
+                status.innerText = "Migration Complete! You can now use the new Suite.";
+                status.style.color = "#22c55e";
+            } catch (err) {
+                status.innerText = "Error: " + err.message;
+                status.style.color = "#ef4444";
+            }
+        }
+    </script>
+</body>
+</html>
