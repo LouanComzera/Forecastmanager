@@ -102,7 +102,60 @@ export default function StrategicForecaster({ companyId }: StrategicForecasterPr
     }
   };
 
+  const renderYearlyTable = (title: string, sectionKey: string) => {
+    const sectionLines = lines.filter(l => l.section === sectionKey);
+    return (
+      <div className="mb-12">
+        <div className="bg-white/5 border-b border-border p-4 flex justify-between items-center rounded-t-2xl">
+          <h3 className="text-xl font-bold text-main">{title}</h3>
+          <span className="text-[10px] uppercase font-bold text-muted tracking-widest">Yearly Projection</span>
+        </div>
+        <div className="bg-card border-x border-b border-border rounded-b-2xl shadow-2xl overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="bg-white/5 text-muted text-[10px] uppercase tracking-tighter border-b border-border">
+                <th className="px-6 py-4 font-bold">Line Item</th>
+                <th className="px-4 py-4 font-bold text-center">Base Amount</th>
+                <th className="px-4 py-4 font-bold text-center">Esc %</th>
+                <th className="px-4 py-4 font-bold text-center">Year 1</th>
+                <th className="px-4 py-4 font-bold text-center">Year 2</th>
+                <th className="px-4 py-4 font-bold text-center">Year 3</th>
+                <th className="w-10"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {sectionLines.map(line => {
+                // Year 1 starts with the first escalation
+                const y1 = line.baseAmount * (1 + line.escalationPercent / 100);
+                const y2 = y1 * (1 + line.escalationPercent / 100);
+                const y3 = y2 * (1 + line.escalationPercent / 100);
+
+                return (
+                  <tr key={line.id} className="hover:bg-white/5 transition-all">
+                    <td className="px-6 py-4 font-bold text-main">{line.description}</td>
+                    <td className="px-4 py-4 text-center text-muted font-mono">{Math.round(line.baseAmount)}</td>
+                    <td className="px-4 py-4 text-center text-muted font-mono">{line.escalationPercent.toFixed(1)}</td>
+                    <td className="px-4 py-4 text-center font-mono font-bold text-emerald-400 bg-emerald-400/5">R {Math.round(y1)}</td>
+                    <td className="px-4 py-4 text-center font-mono font-bold text-emerald-400 bg-emerald-400/5">R {Math.round(y2)}</td>
+                    <td className="px-4 py-4 text-center font-mono font-bold text-emerald-400 bg-emerald-400/5">R {Math.round(y3)}</td>
+                    <td className="px-4 py-4">
+                        <button className="text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const renderSection = (title: string, sectionKey: string) => {
+    if (viewType === 'yearly') return renderYearlyTable(title, sectionKey);
+
     const sectionLines = lines.filter(l => l.section === sectionKey);
     
     return (
@@ -143,8 +196,9 @@ export default function StrategicForecaster({ companyId }: StrategicForecasterPr
                   </td>
                   {months.map((m, i) => {
                     // Calculate which fiscal year we are in (0-indexed)
+                    // But if Year 1 is escalated, then fiscalYearIndex 0 = (1 + Esc)
                     const monthIndex = i;
-                    const fiscalYearIndex = Math.floor(monthIndex / 12);
+                    const fiscalYearIndex = Math.floor(monthIndex / 12) + 1;
                     
                     // Base calculation with compounded escalation
                     const escalatedBase = line.baseAmount * Math.pow(1 + (line.escalationPercent / 100), fiscalYearIndex);
