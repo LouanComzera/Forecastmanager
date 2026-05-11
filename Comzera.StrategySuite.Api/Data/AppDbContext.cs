@@ -9,7 +9,9 @@ public class AppDbContext : DbContext
 
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Expense> Expenses => Set<Expense>();
-    public DbSet<ForecastItem> ForecastItems => Set<ForecastItem>();
+    public DbSet<ForecastItem> ForecastItems { get; set; }
+    public DbSet<StrategicForecastLine> StrategicForecastLines { get; set; }
+    public DbSet<ForecastValue> ForecastValues { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

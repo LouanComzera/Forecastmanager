@@ -17,7 +17,7 @@ import {
 import { Company } from '@/types';
 import SummaryStats from '@/components/SummaryStats';
 import ExpenseList from '@/components/ExpenseList';
-import ForecastingView from '@/components/ForecastingView';
+import StrategicForecaster from '@/components/StrategicForecaster';
 import SettingsView from '@/components/SettingsView';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import { getYearMonth } from '@/lib/utils';
@@ -214,7 +214,7 @@ export default function Dashboard() {
             )}
 
             {currentView === 'forecasting' && (
-              <ForecastingView month={currentMonth} companyId={selectedCompany} />
+              <StrategicForecaster companyId={selectedCompany} />
             )}
 
             {currentView === 'settings' && (
