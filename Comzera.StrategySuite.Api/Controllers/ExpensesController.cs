@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Comzera.StrategySuite.Api.Data;
 using Comzera.StrategySuite.Api.Models;
+using System.Globalization;
+using System.Text;
 
 namespace Comzera.StrategySuite.Api.Controllers;
 
@@ -85,6 +87,58 @@ public class ExpensesController : ControllerBase
         expense.IsPaid = !expense.IsPaid;
         await _context.SaveChangesAsync();
         return Ok(expense);
+    }
+
+    [HttpPost("import-csv")]
+    public async Task<IActionResult> ImportCsv(IFormFile file)
+    {
+        if (file == null || file.Length == 0) return BadRequest("No file uploaded");
+
+        var expenses = new List<Expense>();
+        var companies = await _context.Companies.ToDictionaryAsync(c => c.Name.ToLower(), c => c);
+
+        using (var reader = new StreamReader(file.OpenReadStream()))
+        {
+            var headerLine = await reader.ReadLineAsync(); // Skip header
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var parts = line.Split(',');
+                if (parts.Length < 4) continue;
+
+                var description = parts[0];
+                var amount = decimal.TryParse(parts[1], out var a) ? a : 0;
+                var date = DateTime.TryParse(parts[2], out var d) ? d : DateTime.Now;
+                var companyName = parts[3].Trim();
+                var isPaid = parts.Length > 4 && parts[4].Trim().ToLower() == "true";
+                var isFixed = parts.Length > 5 && parts[5].Trim().ToLower() == "true";
+
+                if (!companies.TryGetValue(companyName.ToLower(), out var company))
+                {
+                    company = new Company { Name = companyName };
+                    _context.Companies.Add(company);
+                    await _context.SaveChangesAsync();
+                    companies[companyName.ToLower()] = company;
+                }
+
+                expenses.Add(new Expense
+                {
+                    Description = description,
+                    Amount = amount,
+                    Date = date,
+                    CompanyId = company.Id,
+                    IsPaid = isPaid,
+                    IsFixed = isFixed
+                });
+            }
+        }
+
+        _context.Expenses.AddRange(expenses);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { count = expenses.Count });
     }
 
     [HttpPost("bulk")]

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   Receipt, 
@@ -11,7 +11,8 @@ import {
   ChevronRight,
   Building2,
   Calendar,
-  LogOut
+  LogOut,
+  Upload
 } from 'lucide-react';
 import { Company } from '@/types';
 import SummaryStats from '@/components/SummaryStats';
@@ -27,8 +28,30 @@ export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(getYearMonth(new Date()));
   const [refreshKey, setRefreshKey] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`${API_URL.EXPENSES}/import-csv`, {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        alert("Import successful!");
+        triggerRefresh();
+      }
+    } catch (err) {
+      console.error("Import failed:", err);
+    }
+  };
 
   useEffect(() => {
     fetch(API_URL.COMPANIES)
@@ -122,6 +145,19 @@ export default function Dashboard() {
             <p className="text-xs text-muted font-medium">{monthName}</p>
           </div>
           <div className="flex gap-4">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleImport} 
+              className="hidden" 
+              accept=".csv"
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 bg-white/5 border border-border text-main px-5 py-2.5 rounded-xl font-bold hover:bg-white/10 transition-all"
+            >
+              <Upload className="w-5 h-5" /> Import CSV
+            </button>
             <button 
               onClick={() => setIsModalOpen(true)}
               className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-bold shadow-glow hover:bg-primary-hover transition-all active:scale-95"

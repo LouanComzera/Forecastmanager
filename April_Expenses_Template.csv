@@ -1,0 +1,6 @@
+Description,Amount,Date,Company,IsPaid,IsFixed
+Office Rent,15000,2026-04-01,Comzera,true,true
+Cloud Services,2500,2026-04-15,Comzera,false,true
+Internet,1200,2026-04-05,MuniFlow,true,true
+Marketing Ads,5000,2026-04-20,MuniFlow,false,false
+Consulting Fees,8000,2026-04-10,StrategySuite,true,false
