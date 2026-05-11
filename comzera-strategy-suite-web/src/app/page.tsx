@@ -17,12 +17,14 @@ import {
 import { Company } from '@/types';
 import SummaryStats from '@/components/SummaryStats';
 import ExpenseList from '@/components/ExpenseList';
+import ForecastingView from '@/components/ForecastingView';
+import SettingsView from '@/components/SettingsView';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import { getYearMonth } from '@/lib/utils';
 import { API_URL } from '@/lib/api';
 
 export default function Dashboard() {
-  const [currentView, setCurrentView] = useState('summary');
+  const [currentView, setCurrentView] = useState('summary'); // 'summary', 'forecasting', 'settings'
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompany, setSelectedCompany] = useState('all');
   const [currentMonth, setCurrentMonth] = useState(getYearMonth(new Date()));
@@ -169,22 +171,55 @@ export default function Dashboard() {
 
         <div className="flex-1 overflow-y-auto p-8 scroll-smooth bg-[#0a0f1d]">
           <div className="max-w-6xl mx-auto">
-            <SummaryStats key={`stats-${refreshKey}-${currentMonth}-${selectedCompany}`} month={currentMonth} companyId={selectedCompany} />
             
-            <div className="fade-in mt-8">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-main flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" /> 
-                  {selectedCompany === 'all' ? 'All Transactions' : 'Company Transactions'}
-                </h2>
-              </div>
-              <ExpenseList 
-                key={`list-${refreshKey}-${currentMonth}-${selectedCompany}`} 
-                month={currentMonth} 
-                companyId={selectedCompany} 
-                onRefresh={triggerRefresh} 
-              />
+            {/* Tab Switcher */}
+            <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit mb-8 border border-border">
+              <button 
+                onClick={() => setCurrentView('summary')}
+                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
+                  currentView === 'summary' ? 'bg-primary text-white shadow-glow' : 'text-muted hover:text-main'
+                }`}
+              >
+                Dashboard
+              </button>
+              <button 
+                onClick={() => setCurrentView('forecast')}
+                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
+                  currentView === 'forecast' ? 'bg-primary text-white shadow-glow' : 'text-muted hover:text-main'
+                }`}
+              >
+                Strategy & Forecast
+              </button>
             </div>
+
+            {currentView === 'summary' && (
+              <>
+                <SummaryStats key={`stats-${refreshKey}-${currentMonth}-${selectedCompany}`} month={currentMonth} companyId={selectedCompany} />
+                
+                <div className="fade-in mt-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold text-main flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-primary" /> 
+                      {selectedCompany === 'all' ? 'All Transactions' : 'Company Transactions'}
+                    </h2>
+                  </div>
+                  <ExpenseList 
+                    key={`list-${refreshKey}-${currentMonth}-${selectedCompany}`} 
+                    month={currentMonth} 
+                    companyId={selectedCompany} 
+                    onRefresh={triggerRefresh} 
+                  />
+                </div>
+              </>
+            )}
+
+            {currentView === 'forecasting' && (
+              <ForecastingView month={currentMonth} companyId={selectedCompany} />
+            )}
+
+            {currentView === 'settings' && (
+              <SettingsView />
+            )}
           </div>
         </div>
 
