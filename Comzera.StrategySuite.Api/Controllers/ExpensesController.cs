@@ -108,10 +108,12 @@ public class ExpensesController : ControllerBase
                 var parts = line.Split(',');
                 if (parts.Length < 4) continue;
 
-                var description = parts[0];
-                var amount = decimal.TryParse(parts[1], out var a) ? a : 0;
-                var date = DateTime.TryParse(parts[2], out var d) ? d : DateTime.Now;
-                var companyName = parts[3].Trim();
+                var date = DateTime.TryParse(parts[0], out var d) ? d : DateTime.Now;
+                var companyName = parts[1].Trim();
+                var description = parts[2];
+                var amount = decimal.TryParse(parts[3], out var a) ? a : 0;
+                
+                // Optional: IsPaid and IsFixed can follow if needed, but primary 4 are prioritized
                 var isPaid = parts.Length > 4 && parts[4].Trim().ToLower() == "true";
                 var isFixed = parts.Length > 5 && parts[5].Trim().ToLower() == "true";
 
