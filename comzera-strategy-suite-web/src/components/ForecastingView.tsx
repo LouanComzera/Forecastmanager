@@ -144,32 +144,34 @@ export default function ForecastingView({ month, companyId }: ForecastingViewPro
                       </td>
                       <td className="px-6 py-4 text-right">
                         {isEditing ? (
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-end gap-3 bg-primary/10 p-3 rounded-xl border border-primary/20">
+                            <div className="flex flex-col gap-1 w-full">
+                              <label className="flex items-center justify-end gap-2 cursor-pointer group mb-1">
+                                <input 
+                                  type="checkbox"
+                                  checked={editData.applyToFuture}
+                                  onChange={(e) => setEditData({...editData, applyToFuture: e.target.checked})}
+                                  className="w-4 h-4 rounded border-primary bg-background checked:bg-primary accent-primary"
+                                />
+                                <span className="text-xs font-bold text-primary group-hover:text-primary-hover transition-colors">Apply to all future months?</span>
+                              </label>
                               <input 
                                 type="number"
                                 step="0.01"
                                 autoFocus
                                 value={editData.amount}
                                 onChange={(e) => setEditData({...editData, amount: e.target.value})}
-                                className="bg-background border border-primary rounded-lg p-2 text-right w-32 font-mono text-main outline-none"
+                                className="bg-background border border-primary/50 rounded-lg p-2 text-right w-full font-mono text-main outline-none focus:border-primary"
                               />
-                              <button onClick={() => saveEdit(item, idx)} className="p-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-all">
-                                <Check className="w-4 h-4" />
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => setEditingId(null)} className="flex items-center gap-1 px-3 py-1.5 bg-white/10 text-muted rounded-lg hover:bg-white/20 transition-all text-xs font-bold">
+                                <X className="w-3 h-3" /> Cancel
                               </button>
-                              <button onClick={() => setEditingId(null)} className="p-2 bg-white/10 text-muted rounded-lg hover:bg-white/20 transition-all">
-                                <X className="w-4 h-4" />
+                              <button onClick={() => saveEdit(item, idx)} className="flex items-center gap-1 px-4 py-1.5 bg-primary text-white rounded-lg hover:bg-primary-hover shadow-glow transition-all text-xs font-bold">
+                                <Check className="w-3 h-3" /> Save Changes
                               </button>
                             </div>
-                            <label className="flex items-center gap-2 cursor-pointer group">
-                              <span className="text-[10px] text-muted group-hover:text-primary transition-colors">Apply to all future months</span>
-                              <input 
-                                type="checkbox"
-                                checked={editData.applyToFuture}
-                                onChange={(e) => setEditData({...editData, applyToFuture: e.target.checked})}
-                                className="w-3 h-3 rounded border-border bg-background checked:bg-primary"
-                              />
-                            </label>
                           </div>
                         ) : (
                           <button 
