@@ -133,8 +133,34 @@ export default function StrategicForecaster({ companyId }: StrategicForecasterPr
                 return (
                   <tr key={line.id} className="hover:bg-white/5 transition-all">
                     <td className="px-6 py-4 font-bold text-main">{line.description}</td>
-                    <td className="px-4 py-4 text-center text-muted font-mono">{Math.round(line.baseAmount)}</td>
-                    <td className="px-4 py-4 text-center text-muted font-mono">{line.escalationPercent.toFixed(1)}</td>
+                    <td className="px-4 py-4">
+                      <input 
+                        type="number" 
+                        value={line.baseAmount}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const newLines = [...lines];
+                          const l = newLines.find(x => x.id === line.id);
+                          if (l) l.baseAmount = val;
+                          setLines(newLines);
+                        }}
+                        className="bg-transparent border border-transparent hover:border-primary/30 rounded p-1 w-full text-center outline-none focus:border-primary font-mono text-muted"
+                      />
+                    </td>
+                    <td className="px-4 py-4">
+                      <input 
+                        type="number" 
+                        value={line.escalationPercent}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const newLines = [...lines];
+                          const l = newLines.find(x => x.id === line.id);
+                          if (l) l.escalationPercent = val;
+                          setLines(newLines);
+                        }}
+                        className="bg-transparent border border-transparent hover:border-primary/30 rounded p-1 w-full text-center outline-none focus:border-primary font-mono text-muted"
+                      />
+                    </td>
                     <td className="px-4 py-4 text-center font-mono font-bold text-emerald-400 bg-emerald-400/5">R {Math.round(y1)}</td>
                     <td className="px-4 py-4 text-center font-mono font-bold text-emerald-400 bg-emerald-400/5">R {Math.round(y2)}</td>
                     <td className="px-4 py-4 text-center font-mono font-bold text-emerald-400 bg-emerald-400/5">R {Math.round(y3)}</td>
@@ -183,14 +209,28 @@ export default function StrategicForecaster({ companyId }: StrategicForecasterPr
                   <td className="px-4 py-4">
                     <input 
                       type="number" 
-                      defaultValue={line.baseAmount}
+                      value={line.baseAmount}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        const newLines = [...lines];
+                        const l = newLines.find(x => x.id === line.id);
+                        if (l) l.baseAmount = val;
+                        setLines(newLines);
+                      }}
                       className="bg-transparent border border-transparent hover:border-primary/30 rounded p-1 w-full text-center outline-none focus:border-primary font-mono text-muted"
                     />
                   </td>
                   <td className="px-4 py-4">
                     <input 
                       type="number" 
-                      defaultValue={line.escalationPercent}
+                      value={line.escalationPercent}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        const newLines = [...lines];
+                        const l = newLines.find(x => x.id === line.id);
+                        if (l) l.escalationPercent = val;
+                        setLines(newLines);
+                      }}
                       className="bg-transparent border border-transparent hover:border-primary/30 rounded p-1 w-full text-center outline-none focus:border-primary font-mono text-muted"
                     />
                   </td>
