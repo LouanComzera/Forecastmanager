@@ -51,7 +51,8 @@ export default function StrategicForecaster({ companyId }: StrategicForecasterPr
   const getMonths = () => {
     const months = [];
     const date = new Date(startYear, startMonth - 1, 1);
-    for (let i = 0; i < 12; i++) {
+    const totalMonths = durationYears * 12;
+    for (let i = 0; i < totalMonths; i++) {
       months.push({
         label: date.toLocaleDateString('en-ZA', { month: 'short', year: '2-digit' }).toUpperCase(),
         month: date.getMonth() + 1,
@@ -141,16 +142,24 @@ export default function StrategicForecaster({ companyId }: StrategicForecasterPr
                     />
                   </td>
                   {months.map((m, i) => {
-                    const val = line.values.find(v => v.year === m.year && v.month === m.month)?.amount || line.baseAmount;
+                    // Calculate which fiscal year we are in (0-indexed)
+                    const monthIndex = i;
+                    const fiscalYearIndex = Math.floor(monthIndex / 12);
+                    
+                    // Base calculation with compounded escalation
+                    const escalatedBase = line.baseAmount * Math.pow(1 + (line.escalationPercent / 100), fiscalYearIndex);
+                    
+                    // Check for manual override
+                    const override = line.values.find(v => v.year === m.year && v.month === m.month);
+                    const val = override ? override.amount : escalatedBase;
+
                     return (
                       <td key={i} className="px-2 py-4 border-l border-border/50 group relative">
                         <input 
                           type="number"
-                          value={val}
+                          value={Math.round(val)}
                           onChange={(e) => {
                             const newAmount = parseFloat(e.target.value);
-                            // Simple shortcut: Alt+Click or some indicator for future push?
-                            // Let's use a small hidden button that appears on hover for "Push to Future"
                             handleValueChange(line.id, m.year, m.month, newAmount, false);
                           }}
                           className={`bg-transparent w-full text-center font-mono font-bold outline-none border-b border-transparent hover:border-primary/50 focus:border-primary ${val > 0 ? 'text-emerald-400' : 'text-muted/50'}`}
