@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { formatCurrency } from '@/lib/utils';
+import { API_URL } from '@/lib/api';
 
 interface SummaryData {
   totalExpenses: number;
@@ -22,7 +23,7 @@ export default function SummaryStats({ month, companyId }: SummaryStatsProps) {
   useEffect(() => {
     setLoading(true);
     const companyParam = companyId && companyId !== 'all' ? `&companyId=${companyId}` : '';
-    fetch(`http://localhost:5000/api/expenses/summary?month=${month}${companyParam}`)
+    fetch(`${API_URL.SUMMARY}?month=${month}${companyParam}`)
       .then(res => res.json())
       .then(d => {
         setData(d);

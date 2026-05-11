@@ -18,6 +18,7 @@ import SummaryStats from '@/components/SummaryStats';
 import ExpenseList from '@/components/ExpenseList';
 import AddExpenseModal from '@/components/AddExpenseModal';
 import { getYearMonth } from '@/lib/utils';
+import { API_URL } from '@/lib/api';
 
 export default function Dashboard() {
   const [currentView, setCurrentView] = useState('summary');
@@ -30,7 +31,7 @@ export default function Dashboard() {
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/companies')
+    fetch(API_URL.COMPANIES)
       .then(res => res.json())
       .then(data => setCompanies(data))
       .catch(err => console.error("Failed to fetch companies:", err));

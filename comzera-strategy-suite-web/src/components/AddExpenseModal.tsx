@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { Company } from '@/types';
+import { API_URL } from '@/lib/api';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ export default function AddExpenseModal({ isOpen, onClose, onSuccess, companies 
     
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/expenses', {
+      const res = await fetch(API_URL.EXPENSES, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

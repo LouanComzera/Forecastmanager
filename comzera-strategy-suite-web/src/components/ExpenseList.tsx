@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Expense } from '@/types';
 import { CheckCircle, Circle, Trash2 } from 'lucide-react';
+import { API_URL } from '@/lib/api';
 
 interface ExpenseListProps {
   month: string;
@@ -18,7 +19,7 @@ export default function ExpenseList({ month, companyId, onRefresh }: ExpenseList
   const fetchExpenses = () => {
     setLoading(true);
     const companyParam = companyId && companyId !== 'all' ? `&companyId=${companyId}` : '';
-    fetch(`http://localhost:5000/api/expenses?month=${month}${companyParam}`)
+    fetch(`${API_URL.EXPENSES}?month=${month}${companyParam}`)
       .then(res => res.json())
       .then(d => {
         setExpenses(d);
@@ -36,7 +37,7 @@ export default function ExpenseList({ month, companyId, onRefresh }: ExpenseList
 
   const togglePaid = async (id: number) => {
     try {
-      await fetch(`http://localhost:5000/api/expenses/${id}/toggle-paid`, { method: 'PUT' });
+      await fetch(`${API_URL.EXPENSES}/${id}/toggle-paid`, { method: 'PUT' });
       fetchExpenses();
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -47,7 +48,7 @@ export default function ExpenseList({ month, companyId, onRefresh }: ExpenseList
   const deleteExpense = async (id: number) => {
     if (!confirm("Are you sure you want to delete this expense?")) return;
     try {
-      await fetch(`http://localhost:5000/api/expenses/${id}`, { method: 'DELETE' });
+      await fetch(`${API_URL.EXPENSES}/${id}`, { method: 'DELETE' });
       fetchExpenses();
       if (onRefresh) onRefresh();
     } catch (err) {
