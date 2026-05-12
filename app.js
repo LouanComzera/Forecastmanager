@@ -1,5 +1,5 @@
 // State Management
-const VERSION = "1.1.2";
+const VERSION = "1.2.3";
 console.log(`Expense Manager v${VERSION} Initializing...`);
 
 // Utilities
@@ -24,8 +24,10 @@ let state = {
     fixedExpenses: JSON.parse(localStorage.getItem('fixedExpenses')) || [], // Recurring items
     forecast: JSON.parse(localStorage.getItem('forecast_data')) || {
         config: { years: 3, escalation: 5, scale: 'month' },
-        items: {} // { company: { sales: [], cos: [], expenses: [] } }
-    }
+        items: {} 
+    },
+    pettyCash: JSON.parse(localStorage.getItem('petty_cash')) || {}, // { month: { user: { receipts: [], travel: [] } } }
+    mileageRate: 4.50 // R4.50 per KM
 };
 
 // DOM Elements
@@ -45,8 +47,18 @@ const expenseForm = document.getElementById('expense-form');
 const companyOptions = document.getElementById('company-options');
 const descriptionOptions = document.getElementById('description-options');
 
+// Petty Cash DOM (Initialized in init)
+let viewPettyCash, btnViewPettyCash, pettyUserSelect, pettyReceiptModal, travelModal;
+
 // Initialize
 function init() {
+    // Initialize Petty Cash DOM
+    viewPettyCash = document.getElementById('view-petty-cash');
+    btnViewPettyCash = document.getElementById('btn-view-petty-cash');
+    pettyUserSelect = document.getElementById('petty-cash-user-select');
+    pettyReceiptModal = document.getElementById('petty-receipt-modal');
+    travelModal = document.getElementById('travel-modal');
+
     const selectMonth = document.getElementById('select-month');
     const selectYear = document.getElementById('select-year');
     const prevMonthBtn = document.getElementById('prev-month');
@@ -77,6 +89,11 @@ function init() {
 
     btnViewSettings.onclick = () => {
         state.currentView = 'settings';
+        switchView();
+    };
+
+    btnViewPettyCash.onclick = () => {
+        state.currentView = 'petty-cash';
         switchView();
     };
 
@@ -243,30 +260,197 @@ function init() {
     // Set default date in form
     document.getElementById('date').value = new Date().toISOString().split('T')[0];
     
-    // Date Picker Enhancements
+    // Date Picker Enhancements (Removed to fix global click trap)
     const dateInput = document.getElementById('date');
     const todayBtn = document.getElementById('btn-set-today');
-    const dateWrapper = document.querySelector('.date-input-wrapper');
     
-    if (todayBtn) {
+    if (todayBtn && dateInput) {
         todayBtn.onclick = (e) => {
             e.stopPropagation();
             dateInput.value = new Date().toISOString().split('T')[0];
         };
     }
 
-    const openPicker = (e) => {
-        if (typeof dateInput.showPicker === 'function') {
-            try {
-                dateInput.showPicker();
-            } catch (err) {
-                console.log("showPicker failed, falling back to focus");
+    // Petty Cash Listeners
+    if (document.getElementById('btn-add-petty-receipt')) {
+        document.getElementById('btn-add-petty-receipt').onclick = () => {
+            if (pettyReceiptModal) pettyReceiptModal.style.display = 'flex';
+            const dateInput = document.getElementById('petty-receipt-date');
+            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+        };
+    }
+    if (document.getElementById('btn-log-travel')) {
+        document.getElementById('btn-log-travel').onclick = () => {
+            if (travelModal) travelModal.style.display = 'flex';
+            const dateInput = document.getElementById('travel-date');
+            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+        };
+    }
+    if (document.getElementById('close-petty-modal')) document.getElementById('close-petty-modal').onclick = () => pettyReceiptModal.style.display = 'none';
+    if (document.getElementById('cancel-petty-receipt')) document.getElementById('cancel-petty-receipt').onclick = () => pettyReceiptModal.style.display = 'none';
+    if (document.getElementById('close-travel-modal')) document.getElementById('close-travel-modal').onclick = () => travelModal.style.display = 'none';
+    if (document.getElementById('cancel-travel')) document.getElementById('cancel-travel').onclick = () => travelModal.style.display = 'none';
+    
+    if (pettyUserSelect) pettyUserSelect.onchange = () => renderPettyCash();
+
+    const btnSavePetty = document.getElementById('btn-save-petty-receipt');
+    if (btnSavePetty) {
+        btnSavePetty.onclick = () => {
+            console.log("Saving Petty Cash Receipt...");
+            const month = state.currentMonth;
+            const user = pettyUserSelect ? pettyUserSelect.value : 'lou-an';
+            
+            const amountInput = document.getElementById('petty-receipt-amount');
+            const dateInput = document.getElementById('petty-receipt-date');
+            const descInput = document.getElementById('petty-receipt-desc');
+            const compInput = document.getElementById('petty-receipt-company');
+
+            if (!amountInput.value || !dateInput.value || !descInput.value || !compInput.value) {
+                alert("Please fill in all fields.");
+                return;
+            }
+
+            const entry = {
+                company: compInput.value,
+                description: descInput.value,
+                amount: parseFloat(amountInput.value) || 0,
+                date: dateInput.value,
+                id: Date.now()
+            };
+            
+            if (!state.pettyCash[month]) state.pettyCash[month] = {};
+            if (!state.pettyCash[month][user]) state.pettyCash[month][user] = { receipts: [], travel: [] };
+            
+            state.pettyCash[month][user].receipts.push(entry);
+            localStorage.setItem('petty_cash', JSON.stringify(state.pettyCash));
+            
+            renderPettyCash();
+            if (pettyReceiptModal) pettyReceiptModal.style.display = 'none';
+            document.getElementById('petty-receipt-form').reset();
+            alert("Receipt Saved!");
+        };
+    }
+
+    const btnSaveTravel = document.getElementById('btn-save-travel');
+    if (btnSaveTravel) {
+        btnSaveTravel.onclick = () => {
+            console.log("Saving Travel Trip...");
+            const month = state.currentMonth;
+            const user = pettyUserSelect ? pettyUserSelect.value : 'lou-an';
+            
+            const kilosInput = document.getElementById('travel-kilos');
+            const reasonInput = document.getElementById('travel-reason');
+            const dateInput = document.getElementById('travel-date');
+            const compInput = document.getElementById('travel-company');
+
+            if (!kilosInput.value || !reasonInput.value || !dateInput.value || !compInput.value) {
+                alert("Please fill in all fields.");
+                return;
+            }
+
+            const entry = {
+                company: compInput.value,
+                kilos: parseFloat(kilosInput.value) || 0,
+                reason: reasonInput.value,
+                date: dateInput.value,
+                id: Date.now()
+            };
+            
+            if (!state.pettyCash[month]) state.pettyCash[month] = {};
+            if (!state.pettyCash[month][user]) state.pettyCash[month][user] = { receipts: [], travel: [] };
+            
+            state.pettyCash[month][user].travel.push(entry);
+            localStorage.setItem('petty_cash', JSON.stringify(state.pettyCash));
+            
+            renderPettyCash();
+            if (travelModal) travelModal.style.display = 'none';
+            document.getElementById('travel-form').reset();
+            alert("Trip Logged!");
+        };
+    }
+
+    // ULTIMATE FALLBACK: Global click listener to completely bypass ALL caching and HTML structure issues.
+    document.addEventListener('click', function(e) {
+        if (e.target.tagName === 'BUTTON') {
+            const btnText = e.target.textContent.trim();
+            if (btnText === 'Save Receipt') {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Global Hijack: Saving Petty Cash...");
+                
+                const month = state.currentMonth;
+                const user = pettyUserSelect ? pettyUserSelect.value : 'lou-an';
+                const amountInput = document.getElementById('petty-receipt-amount');
+                const dateInput = document.getElementById('petty-receipt-date');
+                const descInput = document.getElementById('petty-receipt-desc');
+                const compInput = document.getElementById('petty-receipt-company');
+                
+                if (!amountInput || !amountInput.value) return; // Basic safety
+                
+                const entry = {
+                    company: compInput ? compInput.value : '',
+                    description: descInput ? descInput.value : '',
+                    amount: parseFloat(amountInput.value) || 0,
+                    date: dateInput ? dateInput.value : new Date().toISOString().split('T')[0],
+                    id: Date.now()
+                };
+                
+                if (!state.pettyCash[month]) state.pettyCash[month] = {};
+                if (!state.pettyCash[month][user]) state.pettyCash[month][user] = { receipts: [], travel: [] };
+                
+                state.pettyCash[month][user].receipts.push(entry);
+                localStorage.setItem('petty_cash', JSON.stringify(state.pettyCash));
+                
+                renderPettyCash();
+                if (pettyReceiptModal) pettyReceiptModal.style.display = 'none';
+                
+                // Manually clear instead of resetting the form to avoid date picker focus bugs
+                if(amountInput) amountInput.value = '';
+                if(descInput) descInput.value = '';
+                if(compInput) compInput.value = '';
+                
+                alert("Receipt Saved Successfully!");
+            }
+            
+            if (btnText === 'Log Trip') {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Global Hijack: Saving Travel...");
+                
+                const month = state.currentMonth;
+                const user = pettyUserSelect ? pettyUserSelect.value : 'lou-an';
+                const kilosInput = document.getElementById('travel-kilos');
+                const reasonInput = document.getElementById('travel-reason');
+                const dateInput = document.getElementById('travel-date');
+                const compInput = document.getElementById('travel-company');
+                
+                if (!kilosInput || !kilosInput.value) return;
+                
+                const entry = {
+                    company: compInput ? compInput.value : '',
+                    kilos: parseFloat(kilosInput.value) || 0,
+                    reason: reasonInput ? reasonInput.value : '',
+                    date: dateInput ? dateInput.value : new Date().toISOString().split('T')[0],
+                    id: Date.now()
+                };
+                
+                if (!state.pettyCash[month]) state.pettyCash[month] = {};
+                if (!state.pettyCash[month][user]) state.pettyCash[month][user] = { receipts: [], travel: [] };
+                
+                state.pettyCash[month][user].travel.push(entry);
+                localStorage.setItem('petty_cash', JSON.stringify(state.pettyCash));
+                
+                renderPettyCash();
+                if (travelModal) travelModal.style.display = 'none';
+                
+                if(kilosInput) kilosInput.value = '';
+                if(reasonInput) reasonInput.value = '';
+                if(compInput) compInput.value = '';
+                
+                alert("Trip Logged Successfully!");
             }
         }
-    };
-
-    if (dateWrapper) dateWrapper.onclick = openPicker;
-    dateInput.onfocus = openPicker;
+    });
 }
 
 function updateSelectors() {
@@ -300,11 +484,13 @@ function switchView() {
     viewExpenses.classList.add('hidden');
     viewForecasting.classList.add('hidden');
     if (viewSettings) viewSettings.classList.add('hidden');
+    if (viewPettyCash) viewPettyCash.classList.add('hidden');
     
     btnViewSummary.classList.remove('active');
     btnViewExpenses.classList.remove('active');
     btnViewForecasting.classList.remove('active');
     if (btnViewSettings) btnViewSettings.classList.remove('active');
+    if (btnViewPettyCash) btnViewPettyCash.classList.remove('active');
 
     if (state.currentView === 'summary') {
         viewSummary.classList.remove('hidden');
@@ -322,6 +508,10 @@ function switchView() {
         viewSettings.classList.remove('hidden');
         btnViewSettings.classList.add('active');
         renderSettings();
+    } else if (state.currentView === 'petty-cash') {
+        viewPettyCash.classList.remove('hidden');
+        btnViewPettyCash.classList.add('active');
+        renderPettyCash();
     }
     renderCompanyNav();
     
@@ -879,12 +1069,13 @@ function createForecastTable(company, title, items, years, globalEsc, scale, typ
                 <td><input type="number" value="${item.amount}" class="item-edit-input" style="width: 140px;" onchange="updateForecastItem('${company}', '${type}', ${idx}, 'amount', this.value)"></td>
                 <td><input type="number" value="${displayEsc.toFixed(1)}" class="item-esc-input" onchange="updateForecastItem('${company}', '${type}', ${idx}, 'escalation', this.value)"></td>
                 ${Array.from({length: numColumns}, (_, i) => {
-                    // Revert to yearly escalation step-up: floor(i/12)
-                    const yearPower = isMonthly ? Math.floor(i / 12) : (i + 1);
+                    // Use the exact same compounding index for both views
+                    const yearPower = isMonthly ? Math.floor(i / 12) : i;
                     const calculated = base * Math.pow(1 + effectiveEsc, yearPower);
                     
                     // Check for manual override
-                    const val = item.overrides[i] !== undefined ? item.overrides[i] : Math.round(calculated);
+                    const overrideKey = isMonthly ? `m_${i}` : `y_${i}`;
+                    const val = item.overrides[overrideKey] !== undefined ? item.overrides[overrideKey] : Math.round(calculated);
                     
                     totals[i] += parseFloat(val) || 0;
                     return `
@@ -944,7 +1135,27 @@ window.deleteForecastItem = (company, type, index) => {
 window.updateForecastOverride = (company, type, itemIdx, monthIdx, value) => {
     const item = state.forecast.items[company][type][itemIdx];
     if (!item.overrides) item.overrides = {};
-    item.overrides[monthIdx] = parseFloat(value);
+    
+    const isMonthly = state.forecast.config.scale === 'month';
+    const overrideKey = isMonthly ? `m_${monthIdx}` : `y_${monthIdx}`;
+    
+    if (value.trim() === '') {
+        // Clear the override so auto-math takes over again
+        delete item.overrides[overrideKey];
+    } else {
+        const parsedVal = parseFloat(value);
+        item.overrides[overrideKey] = parsedVal;
+        
+        // Propagate to future months if requested
+        if (confirm("Would you like to apply this amount to all future periods?")) {
+            const numColumns = isMonthly ? state.forecast.config.years * 12 : state.forecast.config.years;
+            for (let i = monthIdx + 1; i < numColumns; i++) {
+                const futureKey = isMonthly ? `m_${i}` : `y_${i}`;
+                item.overrides[futureKey] = parsedVal;
+            }
+        }
+    }
+    
     saveState();
     renderForecasting();
 };
@@ -1073,4 +1284,97 @@ function handleForecastImport(event, type) {
     reader.readAsText(file);
 }
 
+
+
+function renderPettyCash() {
+    if (state.currentView !== 'petty-cash') return;
+    
+    const month = state.currentMonth;
+    const user = pettyUserSelect ? pettyUserSelect.value : 'lou-an';
+    const data = (state.pettyCash[month] && state.pettyCash[month][user]) 
+        ? state.pettyCash[month][user] 
+        : { receipts: [], travel: [] };
+
+    // Stats
+    const cashTotal = data.receipts.reduce((sum, r) => sum + r.amount, 0);
+    const totalKilos = data.travel.reduce((sum, t) => sum + t.kilos, 0);
+    const travelValue = totalKilos * state.mileageRate;
+    const totalClaim = cashTotal + travelValue;
+
+    document.getElementById('petty-cash-total').textContent = utils.curr(cashTotal);
+    document.getElementById('petty-cash-count').textContent = `${data.receipts.length} receipts`;
+    document.getElementById('petty-travel-kilos').textContent = `${totalKilos.toFixed(1)} KM`;
+    document.getElementById('petty-travel-value').textContent = `${utils.curr(travelValue)} reimbursement`;
+    document.getElementById('petty-total-claim').textContent = utils.curr(totalClaim);
+
+    // Receipts Table
+    const receiptsBody = document.getElementById('petty-receipts-list');
+    if (receiptsBody) {
+        receiptsBody.innerHTML = data.receipts.length ? data.receipts.map(r => `
+            <tr>
+                <td>${utils.date(r.date)}</td>
+                <td>${r.description}</td>
+                <td><span class="company-tag">${r.company}</span></td>
+                <td class="text-right">${utils.curr(r.amount)}</td>
+                <td class="text-right">
+                    <button onclick="deletePettyItem('receipts', ${r.id})" class="btn-icon" style="color: var(--accent-red); background:none; border:none; cursor:pointer;">
+                        <i data-lucide="trash-2" style="width:14px;"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">No receipts logged.</td></tr>';
+    }
+
+    // Travel Table
+    const travelBody = document.getElementById('petty-travel-list');
+    if (travelBody) {
+        travelBody.innerHTML = data.travel.length ? data.travel.map(t => `
+            <tr>
+                <td>${utils.date(t.date)}</td>
+                <td>${t.kilos} KM</td>
+                <td>${t.reason}</td>
+                <td><span class="company-tag">${t.company}</span></td>
+                <td class="text-right">
+                    <button onclick="deletePettyItem('travel', ${t.id})" class="btn-icon" style="color: var(--accent-red); background:none; border:none; cursor:pointer;">
+                        <i data-lucide="trash-2" style="width:14px;"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">No travel logged.</td></tr>';
+    }
+
+    lucide.createIcons();
+}
+
+window.deletePettyItem = (type, id) => {
+    if (!confirm('Are you sure you want to delete this entry?')) return;
+    const month = state.currentMonth;
+    const user = pettyUserSelect.value;
+    state.pettyCash[month][user][type] = state.pettyCash[month][user][type].filter(item => item.id !== id);
+    localStorage.setItem('petty_cash', JSON.stringify(state.pettyCash));
+    renderPettyCash();
+};
+
 init();
+function downloadCSVTemplate(type) {
+    let csvContent = "";
+    let fileName = "";
+    
+    if (type === 'actuals') {
+        csvContent = "Date,Company,Description,Amount\n2026-05-01,Your company name,Consulting Fee,15000.00\n2026-05-05,Your company name,Office Rent,8500.00";
+        fileName = "Dashboard_Template.csv";
+    } else {
+        csvContent = "Description,Amount,Escalation %\nProduct Sales A,45000,5.0\nMonthly Service Fee,12000,7.5";
+        fileName = "Forecasting_Template.csv";
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
