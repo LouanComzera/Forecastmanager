@@ -14,6 +14,14 @@
             <i data-lucide="wallet"></i>
             <span>Expenses</span>
         </div>
+        
+        <div class="sidebar-user-context" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 10px;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 5px;">Current Context</div>
+            <select id="active-user-select" class="form-input" style="width: 100%; padding: 8px; font-size: 0.9rem; cursor: pointer; background-color: rgba(0,0,0,0.2);">
+                <!-- Populated by JS -->
+            </select>
+        </div>
+
         <div class="sidebar-content">
             <div class="sidebar-label">Time Period</div>
             <div class="nav-group month-selector-container">
@@ -206,8 +214,7 @@
                 <div class="header-actions">
                     <div class="form-group" style="margin: 0; min-width: 200px;">
                         <select id="petty-cash-user-select" class="form-input">
-                            <option value="lou-an">Lou-an</option>
-                            <option value="dian">Dian</option>
+                            <!-- Populated by JS -->
                         </select>
                     </div>
                     <button class="btn btn-primary" id="btn-add-petty-receipt">
@@ -344,6 +351,70 @@
                         <div style="display: flex; gap: 8px;">
                             <input type="text" id="new-company-input" class="form-input" placeholder="New company name..." style="flex: 1;">
                             <button class="btn btn-primary" id="btn-add-company-settings">Add Company</button>
+                        </div>
+                    </div>
+
+                    <!-- Manage Workspaces Card -->
+                    <div class="settings-card stat-card-main" style="grid-column: 1 / -1;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                            <div style="background: rgba(16, 185, 129, 0.1); color: var(--accent-green); padding: 8px; border-radius: 8px;">
+                                <i data-lucide="folder-tree"></i>
+                            </div>
+                            <h3 style="margin: 0;">Manage Workspaces</h3>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">Create workspaces to group companies together and assign them to specific users.</p>
+                        
+                        <div id="settings-workspaces-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                            <!-- Workspaces will be listed here -->
+                        </div>
+                        
+                        <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                            <h4 style="margin-top:0; margin-bottom: 10px; font-size: 0.9rem;">Create New Workspace</h4>
+                            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                                <input type="text" id="new-workspace-name" class="form-input" placeholder="Workspace Name..." style="flex: 1;">
+                            </div>
+                            <div style="font-size: 0.8rem; margin-bottom: 8px;">Select Companies for this Workspace:</div>
+                            <div id="new-workspace-companies" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; max-height: 100px; overflow-y: auto;">
+                                <!-- Checkboxes populated by JS -->
+                            </div>
+                            <button class="btn btn-primary" id="btn-add-workspace">Create Workspace</button>
+                        </div>
+                    </div>
+
+                    <!-- Manage Users & Roles Card -->
+                    <div class="settings-card stat-card-main" style="grid-column: 1 / -1;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                            <div style="background: rgba(236, 72, 153, 0.1); color: #ec4899; padding: 8px; border-radius: 8px;">
+                                <i data-lucide="users"></i>
+                            </div>
+                            <h3 style="margin: 0;">Manage Users & Roles</h3>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">Add users, assign them roles (Admin vs User), and restrict their access to specific Workspaces.</p>
+                        
+                        <div id="settings-users-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                            <!-- Users will be listed here -->
+                        </div>
+                        
+                        <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                            <h4 style="margin-top:0; margin-bottom: 10px; font-size: 0.9rem;">Add New User</h4>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                <div>
+                                    <label style="font-size: 0.8rem; display: block; margin-bottom: 4px;">Name</label>
+                                    <input type="text" id="new-user-name" class="form-input" placeholder="User Name..." style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.8rem; display: block; margin-bottom: 4px;">Role</label>
+                                    <select id="new-user-role" class="form-input" style="width: 100%;">
+                                        <option value="User">Standard User</option>
+                                        <option value="Admin">Administrator</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.8rem; margin-bottom: 8px;">Assign to Workspaces (Hold Ctrl/Cmd to select multiple):</div>
+                            <select id="new-user-workspaces" class="form-input" multiple style="width: 100%; height: 80px; margin-bottom: 12px;">
+                                <!-- Workspaces populated by JS -->
+                            </select>
+                            <button class="btn btn-primary" id="btn-add-user">Add User</button>
                         </div>
                     </div>
 
@@ -524,6 +595,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=1.2.3"></script>
+    <script src="app.js?v=1.2.4"></script>
 </body>
 </html>

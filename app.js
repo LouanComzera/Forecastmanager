@@ -1,5 +1,5 @@
 // State Management
-const VERSION = "1.2.3";
+const VERSION = "1.2.4";
 console.log(`Expense Manager v${VERSION} Initializing...`);
 
 // Utilities
@@ -27,7 +27,55 @@ let state = {
         items: {} 
     },
     pettyCash: JSON.parse(localStorage.getItem('petty_cash')) || {}, // { month: { user: { receipts: [], travel: [] } } }
+    workspaces: JSON.parse(localStorage.getItem('workspaces')) || [
+        { id: 'w_global', name: 'Global Workspace', companies: [] }
+    ],
+    users: JSON.parse(localStorage.getItem('users')) || [],
+    currentUser: null,
     mileageRate: 4.50 // R4.50 per KM
+};
+
+// Data Migration & Default Setup
+if (state.users.length === 0) {
+    const legacyPeople = JSON.parse(localStorage.getItem('pettyCashPeople')) || ["Lou-an", "Dian", "Antigravity"];
+    state.users = legacyPeople.map((p, idx) => ({
+        id: 'u_' + Date.now() + '_' + idx,
+        name: p,
+        role: 'Admin', // Default legacy users to Admin so they don't lose access
+        workspaces: ['w_global']
+    }));
+    // Assign all existing companies to the Global Workspace by default
+    state.workspaces[0].companies = [...state.companies];
+    
+    // Save migrated data
+    localStorage.setItem('users', JSON.stringify(state.users));
+    localStorage.setItem('workspaces', JSON.stringify(state.workspaces));
+}
+
+// Ensure there is always a current user (simulate session)
+const savedUserId = localStorage.getItem('currentUserId');
+if (savedUserId) {
+    state.currentUser = state.users.find(u => u.id === savedUserId) || state.users[0];
+} else {
+    state.currentUser = state.users[0];
+}
+
+// Access Control Helper
+const utils_access = {
+    canViewAll: () => state.currentUser && state.currentUser.role === 'Admin',
+    getAllowedCompanies: () => {
+        if (!state.currentUser) return [];
+        if (state.currentUser.role === 'Admin') return state.companies; // Admins see everything
+        
+        let allowed = new Set();
+        state.currentUser.workspaces.forEach(wId => {
+            const ws = state.workspaces.find(w => w.id === wId);
+            if (ws && ws.companies) {
+                ws.companies.forEach(c => allowed.add(c));
+            }
+        });
+        return Array.from(allowed);
+    }
 };
 
 // DOM Elements
@@ -135,6 +183,78 @@ function init() {
                 renderSettings();
                 renderCompanyNav();
                 updateForecastCompanySelect();
+            }
+        };
+    }
+    // Context Switcher Logic
+    const activeUserSelect = document.getElementById('active-user-select');
+    if (activeUserSelect) {
+        activeUserSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+        if (state.currentUser) activeUserSelect.value = state.currentUser.id;
+        
+        activeUserSelect.onchange = (e) => {
+            const selectedId = e.target.value;
+            state.currentUser = state.users.find(u => u.id === selectedId);
+            localStorage.setItem('currentUserId', selectedId);
+            // Refresh entire UI context
+            renderCompanyNav();
+            switchView();
+            updatePettyUserSelect();
+        };
+    }
+
+    // Settings: Add Workspace
+    const btnAddWorkspace = document.getElementById('btn-add-workspace');
+    if (btnAddWorkspace) {
+        btnAddWorkspace.onclick = () => {
+            const input = document.getElementById('new-workspace-name');
+            const val = input.value.trim();
+            
+            if (val) {
+                const checkedBoxes = Array.from(document.querySelectorAll('#new-workspace-companies input:checked')).map(cb => cb.value);
+                const newWs = {
+                    id: 'w_' + Date.now(),
+                    name: val,
+                    companies: checkedBoxes
+                };
+                state.workspaces.push(newWs);
+                saveState();
+                input.value = '';
+                // Uncheck all
+                document.querySelectorAll('#new-workspace-companies input').forEach(cb => cb.checked = false);
+                renderSettings();
+            }
+        };
+    }
+
+    // Settings: Add User
+    const btnAddUser = document.getElementById('btn-add-user');
+    if (btnAddUser) {
+        btnAddUser.onclick = () => {
+            const nameInput = document.getElementById('new-user-name');
+            const roleInput = document.getElementById('new-user-role');
+            const wsSelect = document.getElementById('new-user-workspaces');
+            
+            const val = nameInput.value.trim();
+            if (val) {
+                const selectedWs = Array.from(wsSelect.selectedOptions).map(opt => opt.value);
+                const newUser = {
+                    id: 'u_' + Date.now(),
+                    name: val,
+                    role: roleInput.value,
+                    workspaces: selectedWs
+                };
+                state.users.push(newUser);
+                saveState();
+                nameInput.value = '';
+                renderSettings();
+                
+                // Update Context Switcher
+                if (activeUserSelect) {
+                    activeUserSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+                    if (state.currentUser) activeUserSelect.value = state.currentUser.id;
+                }
+                updatePettyUserSelect();
             }
         };
     }
@@ -255,6 +375,7 @@ function init() {
     switchView();
     updateDataLists();
     updateForecastCompanySelect();
+    updatePettyUserSelect();
     lucide.createIcons();
     
     // Set default date in form
@@ -479,7 +600,46 @@ function updateTitle() {
     }
 }
 
+function renderCompanyNav() {
+    const select = document.getElementById('company-nav-select');
+    const currentVal = state.selectedCompany;
+    
+    const allowedCompanies = utils_access.getAllowedCompanies().sort();
+    
+    select.innerHTML = '<option value="all">All Companies</option>' + 
+        allowedCompanies.map(c => `<option value="${c}">${c}</option>`).join('');
+    
+    if (currentVal === 'all' || allowedCompanies.includes(currentVal)) {
+        select.value = currentVal;
+    } else {
+        select.value = 'all';
+        state.selectedCompany = 'all';
+    }
+    
+    // Update the visual "active" state of other buttons
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    if (state.currentView === 'forecasting') {
+        const fcBtn = document.getElementById('btn-view-forecasting');
+        if(fcBtn) fcBtn.classList.add('active');
+    }
+}
+
 function switchView() {
+    // 1. Enforce Access Control Layout Changes
+    const isAdmin = utils_access.canViewAll();
+    const btnSettings = document.getElementById('btn-view-settings');
+    const btnForecasting = document.getElementById('btn-view-forecasting');
+    
+    if (btnSettings) btnSettings.style.display = isAdmin ? 'flex' : 'none';
+    if (btnForecasting) btnForecasting.style.display = isAdmin ? 'flex' : 'none';
+
+    // Force redirection if a standard user is somehow on a restricted page
+    if (!isAdmin && (state.currentView === 'settings' || state.currentView === 'forecasting')) {
+        state.currentView = 'summary';
+    }
+
     viewSummary.classList.add('hidden');
     viewExpenses.classList.add('hidden');
     viewForecasting.classList.add('hidden');
@@ -488,8 +648,8 @@ function switchView() {
     
     btnViewSummary.classList.remove('active');
     btnViewExpenses.classList.remove('active');
-    btnViewForecasting.classList.remove('active');
-    if (btnViewSettings) btnViewSettings.classList.remove('active');
+    if (btnForecasting) btnForecasting.classList.remove('active');
+    if (btnSettings) btnSettings.classList.remove('active');
     if (btnViewPettyCash) btnViewPettyCash.classList.remove('active');
 
     if (state.currentView === 'summary') {
@@ -498,15 +658,15 @@ function switchView() {
         renderSummaryDashboard();
     } else if (state.currentView === 'expenses') {
         viewExpenses.classList.remove('hidden');
-        btnViewExpenses.classList.add('active');
+        btnViewExpenses.classList.remove('active');
         renderDashboard();
-    } else if (state.currentView === 'forecasting') {
+    } else if (state.currentView === 'forecasting' && isAdmin) {
         viewForecasting.classList.remove('hidden');
-        btnViewForecasting.classList.add('active');
+        btnForecasting.classList.add('active');
         renderForecasting();
-    } else if (state.currentView === 'settings') {
+    } else if (state.currentView === 'settings' && isAdmin) {
         viewSettings.classList.remove('hidden');
-        btnViewSettings.classList.add('active');
+        btnSettings.classList.add('active');
         renderSettings();
     } else if (state.currentView === 'petty-cash') {
         viewPettyCash.classList.remove('hidden');
@@ -525,15 +685,20 @@ function switchView() {
             const today = new Date().toISOString().split('T')[0];
             const defaultDate = today.startsWith(yearMonth) ? today : `${yearMonth}-01`;
             
+            const allowed = utils_access.getAllowedCompanies();
+            
             state.fixedExpenses.forEach(fe => {
-                state.expenses[state.currentMonth].push({
-                    company: fe.company,
-                    description: fe.description,
-                    amount: fe.amount,
-                    date: defaultDate,
-                    paid: false,
-                    fixed: true
-                });
+                // Only auto-add if the user has access to this company
+                if (allowed.includes(fe.company)) {
+                    state.expenses[state.currentMonth].push({
+                        company: fe.company,
+                        description: fe.description,
+                        amount: fe.amount,
+                        date: defaultDate,
+                        paid: false,
+                        fixed: true
+                    });
+                }
             });
             saveState();
             renderDashboard();
@@ -594,8 +759,123 @@ function renderSettings() {
         }
     }
     
+    
+    // Workspaces Grid
+    const wsGrid = document.getElementById('settings-workspaces-grid');
+    if (wsGrid) {
+        wsGrid.innerHTML = state.workspaces.map(w => `
+            <div class="settings-item-card" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <strong style="color: var(--text-main); font-size: 0.95rem;">${w.name}</strong>
+                    ${w.id !== 'w_global' ? `<button onclick="deleteWorkspace('${w.id}')" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i data-lucide="trash-2" style="width: 14px;"></i></button>` : ''}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    Companies: ${w.companies && w.companies.length ? w.companies.join(', ') : 'None'}
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // New Workspace Company Checkboxes
+    const wsCompanies = document.getElementById('new-workspace-companies');
+    if (wsCompanies) {
+        wsCompanies.innerHTML = state.companies.sort().map(c => `
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.8rem; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; cursor: pointer;">
+                <input type="checkbox" value="${c}"> ${c}
+            </label>
+        `).join('');
+    }
+
+    // Users Grid
+    const usersGrid = document.getElementById('settings-users-grid');
+    if (usersGrid) {
+        usersGrid.innerHTML = state.users.map(u => {
+            const wsNames = u.workspaces.map(wId => {
+                const ws = state.workspaces.find(w => w.id === wId);
+                return ws ? ws.name : 'Unknown';
+            }).join(', ');
+            
+            return `
+            <div class="settings-item-card" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <strong style="color: var(--text-main); font-size: 0.95rem;">${u.name}</strong>
+                        <span style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: ${u.role === 'Admin' ? 'rgba(236, 72, 153, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${u.role === 'Admin' ? '#ec4899' : '#10b981'};">${u.role}</span>
+                    </div>
+                    ${state.users.length > 1 ? `<button onclick="deleteUser('${u.id}')" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i data-lucide="trash-2" style="width: 14px;"></i></button>` : ''}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    <i data-lucide="folder-tree" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>${wsNames || 'None'}
+                </div>
+            </div>
+        `}).join('');
+    }
+    
+    // New User Workspaces Select
+    const userWsSelect = document.getElementById('new-user-workspaces');
+    if (userWsSelect) {
+        userWsSelect.innerHTML = state.workspaces.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+    }
+    
     lucide.createIcons();
 }
+
+function updatePettyUserSelect() {
+    const select = document.getElementById('petty-cash-user-select');
+    if (!select || !state.currentUser) return;
+    const currentVal = select.value;
+    
+    // If Admin, show everyone. If User, only show themselves.
+    const allowedUsers = state.currentUser.role === 'Admin' ? state.users : [state.currentUser];
+    
+    select.innerHTML = allowedUsers.sort((a,b) => a.name.localeCompare(b.name)).map(u => `
+        <option value="${u.id}">${u.name}</option>
+    `).join('');
+    
+    if (currentVal && allowedUsers.some(u => u.id === currentVal)) {
+        select.value = currentVal;
+    } else if (allowedUsers.length > 0) {
+        select.value = allowedUsers[0].id;
+    }
+}
+
+window.deleteUser = (userId) => {
+    if (state.users.length <= 1) return alert("Cannot delete the last user.");
+    if (confirm(`Remove this user?`)) {
+        state.users = state.users.filter(u => u.id !== userId);
+        if (state.currentUser.id === userId) {
+            state.currentUser = state.users[0];
+            localStorage.setItem('currentUserId', state.currentUser.id);
+        }
+        saveState();
+        renderSettings();
+        
+        const activeUserSelect = document.getElementById('active-user-select');
+        if (activeUserSelect) {
+            activeUserSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+            activeUserSelect.value = state.currentUser.id;
+        }
+        
+        updatePettyUserSelect();
+        renderCompanyNav();
+        switchView();
+    }
+};
+
+window.deleteWorkspace = (wsId) => {
+    if (wsId === 'w_global') return alert("Cannot delete Global Workspace.");
+    if (confirm(`Delete this workspace? Existing data will not be lost, but users assigned to this workspace may lose access to these companies.`)) {
+        state.workspaces = state.workspaces.filter(w => w.id !== wsId);
+        // Remove from users
+        state.users.forEach(u => {
+            u.workspaces = u.workspaces.filter(w => w !== wsId);
+        });
+        saveState();
+        renderSettings();
+        renderCompanyNav();
+        switchView();
+    }
+};
 
 window.removeFixedExpense = (idx) => {
     if (confirm('Stop this expense from recurring in future months?')) {
@@ -652,7 +932,14 @@ window.editCompany = (oldName) => {
 let companyChart = null;
 
 function renderSummaryDashboard() {
-    const currentExpenses = state.expenses[state.currentMonth] || [];
+    let currentExpenses = state.expenses[state.currentMonth] || [];
+    const allowedCompanies = utils_access.getAllowedCompanies();
+    
+    // Filter expenses by allowed companies for standard users
+    if (!utils_access.canViewAll()) {
+        currentExpenses = currentExpenses.filter(e => allowedCompanies.includes(e.company));
+    }
+
     const totalExpenses = currentExpenses.reduce((sum, e) => sum + utils.num(e.amount), 0);
     const unpaidItems = currentExpenses.filter(e => !e.paid);
     const pendingTotal = unpaidItems.reduce((sum, e) => sum + utils.num(e.amount), 0);
@@ -661,7 +948,7 @@ function renderSummaryDashboard() {
     document.getElementById('summary-expense-count').textContent = `${currentExpenses.length} transactions`;
     document.getElementById('summary-pending-total').textContent = utils.curr(pendingTotal);
     document.getElementById('summary-pending-count').textContent = `${unpaidItems.length} items unpaid`;
-    document.getElementById('summary-company-count').textContent = state.companies.length;
+    document.getElementById('summary-company-count').textContent = allowedCompanies.length;
 
     // Spending by Company Chart
     const companyTotals = {};
@@ -715,6 +1002,8 @@ function saveState() {
     localStorage.setItem('companies', JSON.stringify(state.companies));
     localStorage.setItem('descriptions', JSON.stringify(state.descriptions));
     localStorage.setItem('forecast_data', JSON.stringify(state.forecast));
+    localStorage.setItem('workspaces', JSON.stringify(state.workspaces));
+    localStorage.setItem('users', JSON.stringify(state.users));
 }
 
 
@@ -739,8 +1028,14 @@ function renderCompanyNav() {
 function renderDashboard() {
     dashboardGridEl.innerHTML = '';
     let currentExpenses = state.expenses[state.currentMonth] || [];
+    const allowedCompanies = utils_access.getAllowedCompanies();
     
-    // Filter by company if needed
+    // Always filter by what the user is allowed to see first
+    if (!utils_access.canViewAll()) {
+        currentExpenses = currentExpenses.filter(e => allowedCompanies.includes(e.company));
+    }
+    
+    // Then apply company dropdown filter
     if (state.selectedCompany !== 'all') {
         currentExpenses = currentExpenses.filter(e => e.company === state.selectedCompany);
     }
