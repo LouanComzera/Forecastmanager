@@ -1821,23 +1821,49 @@ async function boot() {
     } catch (e) {
         console.error("Failed to load state", e);
     }
+    // Data Migration & Admin Setup
+    let schemaUpdated = false;
     
-    // Data Migration & Default Setup for Email / Password
-    if (state.users.length === 0) {
-        const legacyPeople = ["Lou-an", "Dian", "Antigravity"];
-        state.users = legacyPeople.map((p, idx) => ({
-            id: 'u_' + Date.now() + '_' + idx,
-            name: p,
-            email: p.toLowerCase() + '@comzera.com',
-            password: 'comzera',
-            role: 'Admin',
-            workspaces: ['w_global']
-        }));
-        if(state.workspaces[0]) state.workspaces[0].companies = [...state.companies];
-        saveState();
+    if (state.workspaces.length === 0) {
+        state.workspaces = [{ id: 'w_global', name: 'Global Workspace', companies: [...state.companies] }];
+        schemaUpdated = true;
     }
 
-    let schemaUpdated = false;
+    const legacyPeople = [
+        { name: "Lou-an", email: "lou-an@comzera.com" },
+        { name: "Louan", email: "louan@comzera.com" },
+        { name: "Dian", email: "dian@comzera.com" },
+        { name: "Antigravity", email: "antigravity@comzera.com" }
+    ];
+
+    legacyPeople.forEach((p, idx) => {
+        let existingUser = state.users.find(u => u.email === p.email || u.name.toLowerCase() === p.name.toLowerCase());
+        if (existingUser) {
+            if (existingUser.role !== 'Admin') {
+                existingUser.role = 'Admin';
+                schemaUpdated = true;
+            }
+            if (!existingUser.email) {
+                existingUser.email = p.email;
+                schemaUpdated = true;
+            }
+            if (!existingUser.workspaces.includes('w_global')) {
+                existingUser.workspaces.push('w_global');
+                schemaUpdated = true;
+            }
+        } else {
+            state.users.push({
+                id: 'u_' + Date.now() + '_' + idx + Math.random().toString().substr(2, 5),
+                name: p.name,
+                email: p.email,
+                password: 'comzera',
+                role: 'Admin',
+                workspaces: ['w_global']
+            });
+            schemaUpdated = true;
+        }
+    });
+
     state.users.forEach(u => {
         if (!u.email) {
             u.email = (u.name.toLowerCase() + '@comzera.com').replace(/\s+/g, '');
@@ -1845,6 +1871,7 @@ async function boot() {
             schemaUpdated = true;
         }
     });
+
     if (schemaUpdated) saveState();
 
     if (state.currentUserId) {
