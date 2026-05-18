@@ -42,7 +42,8 @@ if (state.users.length === 0) {
         id: 'u_' + Date.now() + '_' + idx,
         name: p,
         role: 'Admin', // Default legacy users to Admin so they don't lose access
-        workspaces: ['w_global']
+        workspaces: ['w_global'],
+        pin: '1234'
     }));
     // Assign all existing companies to the Global Workspace by default
     state.workspaces[0].companies = [...state.companies];
@@ -52,7 +53,19 @@ if (state.users.length === 0) {
     localStorage.setItem('workspaces', JSON.stringify(state.workspaces));
 }
 
-// Ensure there is always a current user (simulate session)
+// Ensure all users have a secure PIN (default to '1234')
+let pinUpdated = false;
+state.users.forEach(u => {
+    if (!u.pin) {
+        u.pin = "1234";
+        pinUpdated = true;
+    }
+});
+if (pinUpdated) {
+    localStorage.setItem('users', JSON.stringify(state.users));
+}
+
+// Resolve current selected user
 const savedUserId = localStorage.getItem('currentUserId');
 if (savedUserId) {
     state.currentUser = state.users.find(u => u.id === savedUserId) || state.users[0];
@@ -186,7 +199,7 @@ function init() {
             }
         };
     }
-    // Context Switcher Logic
+    // Context Switcher Logic (Intercept with PIN entry for secure access)
     const activeUserSelect = document.getElementById('active-user-select');
     if (activeUserSelect) {
         activeUserSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
@@ -194,12 +207,10 @@ function init() {
         
         activeUserSelect.onchange = (e) => {
             const selectedId = e.target.value;
-            state.currentUser = state.users.find(u => u.id === selectedId);
-            localStorage.setItem('currentUserId', selectedId);
-            // Refresh entire UI context
-            renderCompanyNav();
-            switchView();
-            updatePettyUserSelect();
+            // Pop secure PIN entry screen with Cancel option
+            showPinLoginScreen(true);
+            const loginSelect = document.getElementById('login-user-select');
+            if (loginSelect) loginSelect.value = selectedId;
         };
     }
 
@@ -234,19 +245,30 @@ function init() {
             const nameInput = document.getElementById('new-user-name');
             const roleInput = document.getElementById('new-user-role');
             const wsSelect = document.getElementById('new-user-workspaces');
+            const pinInput = document.getElementById('new-user-pin');
             
             const val = nameInput.value.trim();
+            const pinVal = pinInput.value.trim();
+            
             if (val) {
+                // Ensure PIN is 4 digits, otherwise alert
+                if (pinVal.length !== 4 || isNaN(pinVal)) {
+                    alert('Please enter a secure 4-digit numeric PIN.');
+                    return;
+                }
+                
                 const selectedWs = Array.from(wsSelect.selectedOptions).map(opt => opt.value);
                 const newUser = {
                     id: 'u_' + Date.now(),
                     name: val,
                     role: roleInput.value,
-                    workspaces: selectedWs
+                    workspaces: selectedWs,
+                    pin: pinVal
                 };
                 state.users.push(newUser);
                 saveState();
                 nameInput.value = '';
+                pinInput.value = '';
                 renderSettings();
                 
                 // Update Context Switcher
@@ -804,8 +826,9 @@ function renderSettings() {
                     </div>
                     ${state.users.length > 1 ? `<button onclick="deleteUser('${u.id}')" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i data-lucide="trash-2" style="width: 14px;"></i></button>` : ''}
                 </div>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">
-                    <i data-lucide="folder-tree" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>${wsNames || 'None'}
+                <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
+                    <div><i data-lucide="folder-tree" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>${wsNames || 'None'}</div>
+                    <div style="margin-top: 4px;"><i data-lucide="key" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>PIN: <strong>${u.pin || '1234'}</strong></div>
                 </div>
             </div>
         `}).join('');
@@ -1650,7 +1673,153 @@ window.deletePettyItem = (type, id) => {
     renderPettyCash();
 };
 
+// Session Security & PIN Entry Controller
+let currentPinBuffer = "";
+
+window.pressPin = function(val) {
+    const dots = document.querySelectorAll('.pin-dot');
+    const errorMsg = document.getElementById('pin-login-error');
+    if (errorMsg) errorMsg.style.opacity = "0";
+
+    if (val === 'clear') {
+        currentPinBuffer = "";
+    } else {
+        if (currentPinBuffer.length < 4) {
+            currentPinBuffer += val;
+        }
+    }
+
+    // Update PIN dot indicator lights
+    dots.forEach((dot, idx) => {
+        if (idx < currentPinBuffer.length) {
+            dot.classList.add('active');
+        } else {
+            dot.classList.remove('active');
+        }
+        dot.classList.remove('error');
+    });
+
+    // Auto submit upon entering 4 digits
+    if (currentPinBuffer.length === 4) {
+        setTimeout(submitPin, 200);
+    }
+};
+
+function submitPin() {
+    const selectedUserId = document.getElementById('login-user-select').value;
+    const user = state.users.find(u => u.id === selectedUserId);
+    const errorMsg = document.getElementById('pin-login-error');
+    const dots = document.querySelectorAll('.pin-dot');
+
+    if (user && user.pin === currentPinBuffer) {
+        // Correct PIN!
+        state.currentUser = user;
+        localStorage.setItem('currentUserId', user.id);
+        sessionStorage.setItem('authenticatedUserId', user.id);
+        
+        // Hide overlay and clean buffer
+        const overlay = document.getElementById('pin-login-overlay');
+        if (overlay) overlay.style.opacity = "0";
+        setTimeout(() => {
+            if (overlay) overlay.style.display = 'none';
+        }, 300);
+
+        // Sync Sidebar context drop-down selection
+        const activeUserSelect = document.getElementById('active-user-select');
+        if (activeUserSelect) activeUserSelect.value = user.id;
+
+        currentPinBuffer = "";
+        dots.forEach(d => { d.classList.remove('active'); d.classList.remove('error'); });
+
+        // Refresh entire UI context for this authenticated user
+        renderCompanyNav();
+        switchView();
+        updatePettyUserSelect();
+        init(); // Refresh DOM event mappings
+    } else {
+        // Wrong PIN -> blink error dots and shake
+        if (errorMsg) errorMsg.style.opacity = "1";
+        dots.forEach(d => {
+            d.classList.remove('active');
+            d.classList.add('error');
+        });
+        
+        // Automatic wipe to let them try again
+        setTimeout(() => {
+            currentPinBuffer = "";
+            dots.forEach(d => {
+                d.classList.remove('active');
+                d.classList.remove('error');
+            });
+        }, 850);
+    }
+}
+
+window.cancelPinSwitch = function() {
+    const overlay = document.getElementById('pin-login-overlay');
+    if (overlay) {
+        overlay.style.opacity = "0";
+        setTimeout(() => { overlay.style.display = 'none'; }, 300);
+    }
+    
+    // Revert context drop-down selection back to original authenticated user
+    const activeUserSelect = document.getElementById('active-user-select');
+    if (activeUserSelect && state.currentUser) {
+        activeUserSelect.value = state.currentUser.id;
+    }
+    
+    currentPinBuffer = "";
+    document.querySelectorAll('.pin-dot').forEach(d => {
+        d.classList.remove('active');
+        d.classList.remove('error');
+    });
+};
+
+window.lockSession = function() {
+    sessionStorage.removeItem('authenticatedUserId');
+    showPinLoginScreen(false); // Disallow cancelling back to lock screen
+};
+
+window.showPinLoginScreen = function(allowCancel = false) {
+    const overlay = document.getElementById('pin-login-overlay');
+    if (!overlay) return;
+    
+    // Fill overlay dropdown options
+    const loginSelect = document.getElementById('login-user-select');
+    if (loginSelect) {
+        loginSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+        if (state.currentUser) {
+            loginSelect.value = state.currentUser.id;
+        }
+    }
+
+    // Toggle Back button
+    const cancelBtn = document.getElementById('pin-login-cancel-btn');
+    if (cancelBtn) {
+        cancelBtn.style.display = allowCancel ? 'flex' : 'none';
+    }
+
+    overlay.style.display = 'flex';
+    overlay.style.opacity = '1';
+    currentPinBuffer = "";
+    document.querySelectorAll('.pin-dot').forEach(d => {
+        d.classList.remove('active');
+        d.classList.remove('error');
+    });
+    const errorMsg = document.getElementById('pin-login-error');
+    if (errorMsg) errorMsg.style.opacity = "0";
+};
+
+// Intercept boot check
 init();
+
+const authUserId = sessionStorage.getItem('authenticatedUserId');
+if (authUserId && state.users.some(u => u.id === authUserId)) {
+    const overlay = document.getElementById('pin-login-overlay');
+    if (overlay) overlay.style.display = 'none';
+} else {
+    showPinLoginScreen(false); // Full lock on boot
+}
 function downloadCSVTemplate(type) {
     let csvContent = "";
     let fileName = "";
