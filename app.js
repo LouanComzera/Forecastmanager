@@ -35,16 +35,21 @@ let state = {
     mileageRate: 4.50 // R4.50 per KM
 };
 
-// Data Migration & Default Setup
+// Selected Workspace ID
+state.selectedWorkspaceId = localStorage.getItem('selectedWorkspaceId') || 'w_global';
+
+// Data Migration & Default Setup for Email / Password
 if (state.users.length === 0) {
-    const legacyPeople = JSON.parse(localStorage.getItem('pettyCashPeople')) || ["Lou-an", "Dian", "Antigravity"];
+    const legacyPeople = ["Lou-an", "Dian", "Antigravity"];
     state.users = legacyPeople.map((p, idx) => ({
         id: 'u_' + Date.now() + '_' + idx,
         name: p,
-        role: 'Admin', // Default legacy users to Admin so they don't lose access
-        workspaces: ['w_global'],
-        pin: '1234'
+        email: p.toLowerCase() + '@comzera.com',
+        password: 'comzera', // default password
+        role: 'Admin', // Default legacy users to Admin
+        workspaces: ['w_global']
     }));
+    
     // Assign all existing companies to the Global Workspace by default
     state.workspaces[0].companies = [...state.companies];
     
@@ -53,41 +58,50 @@ if (state.users.length === 0) {
     localStorage.setItem('workspaces', JSON.stringify(state.workspaces));
 }
 
-// Ensure all users have a secure PIN (default to '1234')
-let pinUpdated = false;
+// Migrate PIN users to Email/Password if they haven't been yet
+let schemaUpdated = false;
 state.users.forEach(u => {
-    if (!u.pin) {
-        u.pin = "1234";
-        pinUpdated = true;
+    if (!u.email) {
+        u.email = (u.name.toLowerCase() + '@comzera.com').replace(/\s+/g, '');
+        u.password = 'comzera';
+        schemaUpdated = true;
     }
 });
-if (pinUpdated) {
+if (schemaUpdated) {
     localStorage.setItem('users', JSON.stringify(state.users));
 }
 
 // Resolve current selected user
 const savedUserId = localStorage.getItem('currentUserId');
 if (savedUserId) {
-    state.currentUser = state.users.find(u => u.id === savedUserId) || state.users[0];
-} else {
-    state.currentUser = state.users[0];
+    state.currentUser = state.users.find(u => u.id === savedUserId) || null;
 }
 
-// Access Control Helper
+// Access Control Helper (Now filters based on selected workspace AND user context!)
 const utils_access = {
     canViewAll: () => state.currentUser && state.currentUser.role === 'Admin',
     getAllowedCompanies: () => {
-        if (!state.currentUser) return [];
-        if (state.currentUser.role === 'Admin') return state.companies; // Admins see everything
-        
-        let allowed = new Set();
-        state.currentUser.workspaces.forEach(wId => {
-            const ws = state.workspaces.find(w => w.id === wId);
-            if (ws && ws.companies) {
-                ws.companies.forEach(c => allowed.add(c));
+        // If w_global is selected or the user is admin and w_global is selected, show all
+        if (state.selectedWorkspaceId === 'w_global') {
+            if (state.currentUser && state.currentUser.role !== 'Admin') {
+                let allowed = new Set();
+                state.currentUser.workspaces.forEach(wId => {
+                    const ws = state.workspaces.find(w => w.id === wId);
+                    if (ws && ws.companies) {
+                        ws.companies.forEach(c => allowed.add(c));
+                    }
+                });
+                return Array.from(allowed);
             }
-        });
-        return Array.from(allowed);
+            return state.companies;
+        }
+        
+        // Otherwise, show only the companies that belong to the active workspace
+        const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspaceId);
+        if (activeWs && activeWs.companies) {
+            return activeWs.companies;
+        }
+        return [];
     }
 };
 
@@ -199,34 +213,49 @@ function init() {
             }
         };
     }
-    // Context Switcher Logic (Intercept with PIN entry for secure access)
-    const activeUserSelect = document.getElementById('active-user-select');
-    if (activeUserSelect) {
-        activeUserSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
-        if (state.currentUser) activeUserSelect.value = state.currentUser.id;
-        
-        activeUserSelect.onchange = (e) => {
-            const selectedId = e.target.value;
-            // Pop secure PIN entry screen with Cancel option
-            showPinLoginScreen(true);
-            const loginSelect = document.getElementById('login-user-select');
-            if (loginSelect) loginSelect.value = selectedId;
-        };
-    }
+    // Workspace Switcher Logic
+    window.updateWorkspaceDropdown = function() {
+        const activeWorkspaceSelect = document.getElementById('active-workspace-select');
+        if (activeWorkspaceSelect) {
+            // Show w_global plus workspaces owned by this user (or all if admin)
+            const allowedWorkspaces = state.currentUser && state.currentUser.role === 'Admin' 
+                ? state.workspaces 
+                : state.workspaces.filter(w => w.id === 'w_global' || w.ownerId === state.currentUser.id);
+
+            activeWorkspaceSelect.innerHTML = allowedWorkspaces.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+            if (state.selectedWorkspaceId) {
+                if (allowedWorkspaces.some(w => w.id === state.selectedWorkspaceId)) {
+                    activeWorkspaceSelect.value = state.selectedWorkspaceId;
+                } else {
+                    state.selectedWorkspaceId = 'w_global';
+                    activeWorkspaceSelect.value = 'w_global';
+                    localStorage.setItem('selectedWorkspaceId', 'w_global');
+                }
+            }
+            
+            activeWorkspaceSelect.onchange = (e) => {
+                state.selectedWorkspaceId = e.target.value;
+                localStorage.setItem('selectedWorkspaceId', state.selectedWorkspaceId);
+                
+                // Refresh entire UI context for this workspace
+                renderCompanyNav();
+                switchView();
+                renderSummaryDashboard();
+            };
+        }
+    };
+    updateWorkspaceDropdown();
 
     // Settings: Add Workspace
     const btnAddWorkspace = document.getElementById('btn-add-workspace');
     if (btnAddWorkspace) {
-        btnAddWorkspace.onclick = () => {
-            const input = document.getElementById('new-workspace-name');
-            const val = input.value.trim();
-            
             if (val) {
                 const checkedBoxes = Array.from(document.querySelectorAll('#new-workspace-companies input:checked')).map(cb => cb.value);
                 const newWs = {
                     id: 'w_' + Date.now(),
                     name: val,
-                    companies: checkedBoxes
+                    companies: checkedBoxes,
+                    ownerId: state.currentUser ? state.currentUser.id : null
                 };
                 state.workspaces.push(newWs);
                 saveState();
@@ -234,6 +263,7 @@ function init() {
                 // Uncheck all
                 document.querySelectorAll('#new-workspace-companies input').forEach(cb => cb.checked = false);
                 renderSettings();
+                updateWorkspaceDropdown();
             }
         };
     }
@@ -245,15 +275,16 @@ function init() {
             const nameInput = document.getElementById('new-user-name');
             const roleInput = document.getElementById('new-user-role');
             const wsSelect = document.getElementById('new-user-workspaces');
-            const pinInput = document.getElementById('new-user-pin');
+            const emailInput = document.getElementById('new-user-email');
+            const passInput = document.getElementById('new-user-password');
             
             const val = nameInput.value.trim();
-            const pinVal = pinInput.value.trim();
+            const emailVal = emailInput.value.trim().toLowerCase();
+            const passVal = passInput.value;
             
-            if (val) {
-                // Ensure PIN is 4 digits, otherwise alert
-                if (pinVal.length !== 4 || isNaN(pinVal)) {
-                    alert('Please enter a secure 4-digit numeric PIN.');
+            if (val && emailVal && passVal) {
+                if (state.users.some(u => u.email === emailVal)) {
+                    alert('An account with this email already exists.');
                     return;
                 }
                 
@@ -261,22 +292,22 @@ function init() {
                 const newUser = {
                     id: 'u_' + Date.now(),
                     name: val,
+                    email: emailVal,
+                    password: passVal,
                     role: roleInput.value,
-                    workspaces: selectedWs,
-                    pin: pinVal
+                    workspaces: selectedWs
                 };
                 state.users.push(newUser);
                 saveState();
                 nameInput.value = '';
-                pinInput.value = '';
+                emailInput.value = '';
+                passInput.value = '';
                 renderSettings();
                 
-                // Update Context Switcher
-                if (activeUserSelect) {
-                    activeUserSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
-                    if (state.currentUser) activeUserSelect.value = state.currentUser.id;
-                }
+                updateWorkspaceDropdown();
                 updatePettyUserSelect();
+            } else {
+                alert('Please fill in all fields.');
             }
         };
     }
@@ -828,7 +859,7 @@ function renderSettings() {
                 </div>
                 <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
                     <div><i data-lucide="folder-tree" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>${wsNames || 'None'}</div>
-                    <div style="margin-top: 4px;"><i data-lucide="key" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>PIN: <strong>${u.pin || '1234'}</strong></div>
+                    <div style="margin-top: 4px;"><i data-lucide="mail" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i>${u.email}</div>
                 </div>
             </div>
         `}).join('');
@@ -1673,140 +1704,150 @@ window.deletePettyItem = (type, id) => {
     renderPettyCash();
 };
 
-// Session Security & PIN Entry Controller
-let currentPinBuffer = "";
+// Session Security & Email/Password Authenticator Controller
+let authMode = 'login'; // 'login' or 'signup'
 
-window.pressPin = function(val) {
-    const dots = document.querySelectorAll('.pin-dot');
-    const errorMsg = document.getElementById('pin-login-error');
+window.toggleAuthMode = function() {
+    const title = document.getElementById('auth-title');
+    const subtitle = document.getElementById('auth-subtitle');
+    const loginFields = document.getElementById('login-form-fields');
+    const signupFields = document.getElementById('signup-form-fields');
+    const toggleBtn = document.getElementById('auth-toggle-btn');
+    const footerText = document.getElementById('auth-footer-text');
+    const errorMsg = document.getElementById('auth-error');
     if (errorMsg) errorMsg.style.opacity = "0";
 
-    if (val === 'clear') {
-        currentPinBuffer = "";
+    if (authMode === 'login') {
+        authMode = 'signup';
+        title.textContent = 'Create Account';
+        subtitle.textContent = 'Register to manage your strategic workspaces';
+        loginFields.style.display = 'none';
+        signupFields.style.display = 'flex';
+        footerText.textContent = 'Already have an account?';
+        toggleBtn.textContent = 'Sign In';
     } else {
-        if (currentPinBuffer.length < 4) {
-            currentPinBuffer += val;
-        }
-    }
-
-    // Update PIN dot indicator lights
-    dots.forEach((dot, idx) => {
-        if (idx < currentPinBuffer.length) {
-            dot.classList.add('active');
-        } else {
-            dot.classList.remove('active');
-        }
-        dot.classList.remove('error');
-    });
-
-    // Auto submit upon entering 4 digits
-    if (currentPinBuffer.length === 4) {
-        setTimeout(submitPin, 200);
+        authMode = 'login';
+        title.textContent = 'Welcome Back';
+        subtitle.textContent = 'Enter your credentials to access your Expense Manager';
+        loginFields.style.display = 'flex';
+        signupFields.style.display = 'none';
+        footerText.textContent = "Don't have an account?";
+        toggleBtn.textContent = 'Sign Up';
     }
 };
 
-function submitPin() {
-    const selectedUserId = document.getElementById('login-user-select').value;
-    const user = state.users.find(u => u.id === selectedUserId);
-    const errorMsg = document.getElementById('pin-login-error');
-    const dots = document.querySelectorAll('.pin-dot');
+window.handleLogin = function() {
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const pass = document.getElementById('login-password').value;
 
-    if (user && user.pin === currentPinBuffer) {
-        // Correct PIN!
+    if (!email || !pass) {
+        showAuthError('Please fill in all fields.');
+        return;
+    }
+
+    const user = state.users.find(u => u.email === email && u.password === pass);
+    if (user) {
+        // Success!
         state.currentUser = user;
         localStorage.setItem('currentUserId', user.id);
         sessionStorage.setItem('authenticatedUserId', user.id);
         
-        // Hide overlay and clean buffer
-        const overlay = document.getElementById('pin-login-overlay');
-        if (overlay) overlay.style.opacity = "0";
-        setTimeout(() => {
-            if (overlay) overlay.style.display = 'none';
-        }, 300);
+        // Hide overlay
+        const overlay = document.getElementById('auth-overlay');
+        if (overlay) {
+            overlay.style.opacity = "0";
+            setTimeout(() => { overlay.style.display = 'none'; }, 300);
+        }
 
-        // Sync Sidebar context drop-down selection
-        const activeUserSelect = document.getElementById('active-user-select');
-        if (activeUserSelect) activeUserSelect.value = user.id;
-
-        currentPinBuffer = "";
-        dots.forEach(d => { d.classList.remove('active'); d.classList.remove('error'); });
-
-        // Refresh entire UI context for this authenticated user
+        // Sync workspaces and refresh entire UI context
+        init();
         renderCompanyNav();
         switchView();
+        renderSummaryDashboard();
         updatePettyUserSelect();
-        init(); // Refresh DOM event mappings
     } else {
-        // Wrong PIN -> blink error dots and shake
-        if (errorMsg) errorMsg.style.opacity = "1";
-        dots.forEach(d => {
-            d.classList.remove('active');
-            d.classList.add('error');
-        });
-        
-        // Automatic wipe to let them try again
-        setTimeout(() => {
-            currentPinBuffer = "";
-            dots.forEach(d => {
-                d.classList.remove('active');
-                d.classList.remove('error');
-            });
-        }, 850);
+        showAuthError('Invalid email or password.');
     }
-}
+};
 
-window.cancelPinSwitch = function() {
-    const overlay = document.getElementById('pin-login-overlay');
+window.handleSignup = function() {
+    const name = document.getElementById('signup-name').value.trim();
+    const email = document.getElementById('signup-email').value.trim().toLowerCase();
+    const pass = document.getElementById('signup-password').value;
+    
+    if (!name || !email || !pass) {
+        showAuthError('Please fill in all fields.');
+        return;
+    }
+
+    if (state.users.some(u => u.email === email)) {
+        showAuthError('An account with this email already exists.');
+        return;
+    }
+
+    // Create new user profile
+    const newUser = {
+        id: 'u_' + Date.now(),
+        name: name,
+        email: email,
+        password: pass,
+        role: 'User', // New signups are users by default
+        workspaces: ['w_global']
+    };
+
+    state.users.push(newUser);
+    saveState();
+
+    // Automatically log them in
+    state.currentUser = newUser;
+    localStorage.setItem('currentUserId', newUser.id);
+    sessionStorage.setItem('authenticatedUserId', newUser.id);
+
+    const overlay = document.getElementById('auth-overlay');
     if (overlay) {
         overlay.style.opacity = "0";
         setTimeout(() => { overlay.style.display = 'none'; }, 300);
     }
-    
-    // Revert context drop-down selection back to original authenticated user
-    const activeUserSelect = document.getElementById('active-user-select');
-    if (activeUserSelect && state.currentUser) {
-        activeUserSelect.value = state.currentUser.id;
+
+    // Clean forms
+    document.getElementById('signup-name').value = '';
+    document.getElementById('signup-email').value = '';
+    document.getElementById('signup-password').value = '';
+
+    init();
+    renderCompanyNav();
+    switchView();
+    renderSummaryDashboard();
+    updatePettyUserSelect();
+};
+
+function showAuthError(msg) {
+    const errorMsg = document.getElementById('auth-error');
+    if (errorMsg) {
+        errorMsg.textContent = msg;
+        errorMsg.style.opacity = "1";
     }
-    
-    currentPinBuffer = "";
-    document.querySelectorAll('.pin-dot').forEach(d => {
-        d.classList.remove('active');
-        d.classList.remove('error');
-    });
-};
+}
 
-window.lockSession = function() {
+window.logoutSession = function() {
     sessionStorage.removeItem('authenticatedUserId');
-    showPinLoginScreen(false); // Disallow cancelling back to lock screen
+    showAuthScreen();
 };
 
-window.showPinLoginScreen = function(allowCancel = false) {
-    const overlay = document.getElementById('pin-login-overlay');
+window.showAuthScreen = function() {
+    const overlay = document.getElementById('auth-overlay');
     if (!overlay) return;
     
-    // Fill overlay dropdown options
-    const loginSelect = document.getElementById('login-user-select');
-    if (loginSelect) {
-        loginSelect.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
-        if (state.currentUser) {
-            loginSelect.value = state.currentUser.id;
-        }
-    }
-
-    // Toggle Back button
-    const cancelBtn = document.getElementById('pin-login-cancel-btn');
-    if (cancelBtn) {
-        cancelBtn.style.display = allowCancel ? 'flex' : 'none';
-    }
-
+    // Reset inputs
+    const emailIn = document.getElementById('login-email');
+    const passIn = document.getElementById('login-password');
+    if (emailIn) emailIn.value = '';
+    if (passIn) passIn.value = '';
+    
     overlay.style.display = 'flex';
     overlay.style.opacity = '1';
-    currentPinBuffer = "";
-    document.querySelectorAll('.pin-dot').forEach(d => {
-        d.classList.remove('active');
-        d.classList.remove('error');
-    });
-    const errorMsg = document.getElementById('pin-login-error');
+    
+    const errorMsg = document.getElementById('auth-error');
     if (errorMsg) errorMsg.style.opacity = "0";
 };
 
@@ -1815,10 +1856,10 @@ init();
 
 const authUserId = sessionStorage.getItem('authenticatedUserId');
 if (authUserId && state.users.some(u => u.id === authUserId)) {
-    const overlay = document.getElementById('pin-login-overlay');
+    const overlay = document.getElementById('auth-overlay');
     if (overlay) overlay.style.display = 'none';
 } else {
-    showPinLoginScreen(false); // Full lock on boot
+    showAuthScreen(); // Full lock on boot
 }
 function downloadCSVTemplate(type) {
     let csvContent = "";

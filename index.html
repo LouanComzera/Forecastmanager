@@ -17,10 +17,10 @@
         
         <div class="sidebar-user-context" style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 5px;">
-                <span>Current Context</span>
-                <button onclick="lockSession()" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); color: #f59e0b; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; transition: 0.2s;"><i data-lucide="lock" style="width: 10px; height: 10px;"></i> Lock</button>
+                <span>Workspace Context</span>
+                <button onclick="logoutSession()" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; transition: 0.2s;"><i data-lucide="log-out" style="width: 10px; height: 10px;"></i> Sign Out</button>
             </div>
-            <select id="active-user-select" class="form-input" style="width: 100%; padding: 8px; font-size: 0.9rem; cursor: pointer; background-color: rgba(0,0,0,0.2);">
+            <select id="active-workspace-select" class="form-input" style="width: 100%; padding: 8px; font-size: 0.9rem; cursor: pointer; background-color: rgba(0,0,0,0.2);">
                 <!-- Populated by JS -->
             </select>
         </div>
@@ -400,7 +400,7 @@
                         
                         <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
                             <h4 style="margin-top:0; margin-bottom: 10px; font-size: 0.9rem;">Add New User</h4>
-                            <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px;">
                                 <div>
                                     <label style="font-size: 0.8rem; display: block; margin-bottom: 4px;">Name</label>
                                     <input type="text" id="new-user-name" class="form-input" placeholder="User Name..." style="width: 100%;">
@@ -413,8 +413,12 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label style="font-size: 0.8rem; display: block; margin-bottom: 4px;">PIN (4-digits)</label>
-                                    <input type="password" id="new-user-pin" class="form-input" placeholder="1234" maxlength="4" style="width: 100%; text-align: center; font-size: 1rem; font-weight: bold; letter-spacing: 2px;">
+                                    <label style="font-size: 0.8rem; display: block; margin-bottom: 4px;">Email</label>
+                                    <input type="email" id="new-user-email" class="form-input" placeholder="email@company.com" style="width: 100%;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.8rem; display: block; margin-bottom: 4px;">Password</label>
+                                    <input type="password" id="new-user-password" class="form-input" placeholder="••••••••" style="width: 100%;">
                                 </div>
                             </div>
                             <div style="font-size: 0.8rem; margin-bottom: 8px;">Assign to Workspaces (Hold Ctrl/Cmd to select multiple):</div>
@@ -603,102 +607,60 @@
     </div>
 
 
-    <!-- Beautiful Fullscreen PIN Authentication Overlay -->
-    <div id="pin-login-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); z-index: 99999; display: flex; align-items: center; justify-content: center; color: #fff; font-family: system-ui, -apple-system, sans-serif; opacity: 1; transition: opacity 0.3s ease;">
-        <div style="width: 100%; max-width: 400px; padding: 40px 30px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); text-align: center; display: flex; flex-direction: column; gap: 24px; position: relative;">
+    <!-- Beautiful Fullscreen Self-Service Sign In / Sign Up Overlay -->
+    <div id="auth-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 10, 15, 0.96); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); z-index: 99999; display: flex; align-items: center; justify-content: center; color: #fff; font-family: system-ui, -apple-system, sans-serif; opacity: 1; transition: opacity 0.3s ease;">
+        <div id="auth-card" style="width: 100%; max-width: 420px; padding: 40px 30px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 24px; position: relative;">
             
-            <!-- Context switcher cancel button -->
-            <button id="pin-login-cancel-btn" onclick="cancelPinSwitch()" style="position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 10px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer; display: none; align-items: center; gap: 6px; font-weight: 500; transition: 0.2s;">
-                <i data-lucide="arrow-left" style="width: 14px; height: 14px;"></i> Back
-            </button>
-
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <!-- Header -->
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;">
                 <div style="background: linear-gradient(135deg, #ec4899, #8b5cf6); padding: 16px; border-radius: 22px; box-shadow: 0 0 24px rgba(236,72,153,0.3); display: inline-flex; align-items: center; justify-content: center;">
-                    <i data-lucide="shield-check" style="width: 32px; height: 32px; color: #fff;"></i>
+                    <i data-lucide="wallet" style="width: 32px; height: 32px; color: #fff;"></i>
                 </div>
-                <h2 style="margin: 10px 0 0 0; font-size: 1.45rem; font-weight: 700; color: #fff; letter-spacing: -0.5px;">Workspace Security</h2>
-                <p id="pin-login-subtitle" style="margin: 0; font-size: 0.85rem; color: #94a3b8;">Choose profile and enter 4-digit PIN</p>
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 8px; text-align: left;">
-                <label style="font-size: 0.78rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Select Profile</label>
-                <select id="login-user-select" class="form-input" style="width: 100%; padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; font-size: 1rem; font-weight: 500; cursor: pointer; outline: none; transition: 0.2s;">
-                    <!-- Populated by JS -->
-                </select>
+                <h2 id="auth-title" style="margin: 10px 0 0 0; font-size: 1.55rem; font-weight: 700; color: #fff; letter-spacing: -0.5px;">Welcome Back</h2>
+                <p id="auth-subtitle" style="margin: 0; font-size: 0.82rem; color: #94a3b8; line-height: 1.4;">Enter your credentials to access your Expense Manager</p>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 16px;">
-                <!-- Password Field Display -->
-                <div style="position: relative; display: flex; justify-content: center; gap: 18px; margin: 10px 0;">
-                    <div class="pin-dot" style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); transition: 0.15s; background: transparent;"></div>
-                    <div class="pin-dot" style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); transition: 0.15s; background: transparent;"></div>
-                    <div class="pin-dot" style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); transition: 0.15s; background: transparent;"></div>
-                    <div class="pin-dot" style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); transition: 0.15s; background: transparent;"></div>
+            <!-- Login Form Fields -->
+            <div id="login-form-fields" style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.75rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Email Address</label>
+                    <input type="email" id="login-email" class="form-input" placeholder="name@company.com" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 0.95rem;">
                 </div>
-                
-                <!-- PIN numeric keypad -->
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; justify-items: center; max-width: 250px; margin: 0 auto;">
-                    <button class="pin-btn" onclick="pressPin('1')">1</button>
-                    <button class="pin-btn" onclick="pressPin('2')">2</button>
-                    <button class="pin-btn" onclick="pressPin('3')">3</button>
-                    <button class="pin-btn" onclick="pressPin('4')">4</button>
-                    <button class="pin-btn" onclick="pressPin('5')">5</button>
-                    <button class="pin-btn" onclick="pressPin('6')">6</button>
-                    <button class="pin-btn" onclick="pressPin('7')">7</button>
-                    <button class="pin-btn" onclick="pressPin('8')">8</button>
-                    <button class="pin-btn" onclick="pressPin('9')">9</button>
-                    <button class="pin-btn pin-action-btn" onclick="pressPin('clear')"><i data-lucide="delete" style="width:16px;"></i></button>
-                    <button class="pin-btn" onclick="pressPin('0')">0</button>
-                    <button class="pin-btn pin-action-btn" id="pin-submit-btn" style="background: rgba(236,72,153,0.15); border-color: rgba(236,72,153,0.3); color: #ec4899;" onclick="pressPin('enter')"><i data-lucide="arrow-right" style="width:16px;"></i></button>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.75rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Password</label>
+                    <input type="password" id="login-password" class="form-input" placeholder="••••••••" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 0.95rem;">
                 </div>
+                <button onclick="handleLogin()" class="btn btn-primary" style="padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 12px; margin-top: 10px;">Sign In</button>
             </div>
 
-            <div id="pin-login-error" style="color: #ef4444; font-size: 0.85rem; font-weight: 500; min-height: 20px; transition: 0.2s; opacity: 0;">
-                Incorrect PIN. Please try again.
+            <!-- Sign Up Form Fields -->
+            <div id="signup-form-fields" style="display: none; flex-direction: column; gap: 16px;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.75rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Full Name</label>
+                    <input type="text" id="signup-name" class="form-input" placeholder="John Doe" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 0.95rem;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.75rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Email Address</label>
+                    <input type="email" id="signup-email" class="form-input" placeholder="name@company.com" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 0.95rem;">
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 0.75rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Password</label>
+                    <input type="password" id="signup-password" class="form-input" placeholder="••••••••" style="width: 100%; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 0.95rem;">
+                </div>
+                <button onclick="handleSignup()" class="btn btn-primary" style="padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 12px; margin-top: 10px;">Create Account</button>
+            </div>
+
+            <!-- Error Messages -->
+            <div id="auth-error" style="color: #ef4444; font-size: 0.85rem; font-weight: 500; text-align: center; min-height: 20px; transition: 0.2s; opacity: 0;"></div>
+
+            <!-- Toggle Links -->
+            <div style="text-align: center; font-size: 0.85rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 16px;">
+                <span id="auth-footer-text">Don't have an account?</span>
+                <a href="javascript:void(0)" id="auth-toggle-btn" onclick="toggleAuthMode()" style="color: #ec4899; font-weight: 600; text-decoration: none; margin-left: 6px; transition: 0.2s;">Sign Up</a>
             </div>
         </div>
     </div>
 
-    <style>
-        .pin-btn {
-            width: 58px;
-            height: 58px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: #fff;
-            font-size: 1.25rem;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-            user-select: none;
-        }
-        .pin-btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.2);
-            transform: scale(1.05);
-        }
-        .pin-btn:active {
-            transform: scale(0.95);
-        }
-        .pin-action-btn {
-            background: rgba(255, 255, 255, 0.03);
-            border-color: transparent;
-        }
-        .pin-dot.active {
-            background: #ec4899 !important;
-            border-color: #ec4899 !important;
-            box-shadow: 0 0 10px rgba(236, 72, 153, 0.8);
-        }
-        .pin-dot.error {
-            background: #ef4444 !important;
-            border-color: #ef4444 !important;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
-        }
-    </style>
     <script src="app.js?v=1.2.4"></script>
 </body>
 </html>
