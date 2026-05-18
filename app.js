@@ -249,6 +249,9 @@ function init() {
     // Settings: Add Workspace
     const btnAddWorkspace = document.getElementById('btn-add-workspace');
     if (btnAddWorkspace) {
+        btnAddWorkspace.onclick = () => {
+            const input = document.getElementById('new-workspace-name');
+            const val = input.value.trim();
             if (val) {
                 const checkedBoxes = Array.from(document.querySelectorAll('#new-workspace-companies input:checked')).map(cb => cb.value);
                 const newWs = {
