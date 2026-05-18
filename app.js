@@ -10,72 +10,25 @@ const utils = {
 };
 
 let state = {
-    expenses: JSON.parse(localStorage.getItem('expenses')) || {},
-    companies: JSON.parse(localStorage.getItem('companies')) || [
-        "RSA", "Equisim", "Eazytask", "Muniflow", "Comzera Solutions", "Comzera Technologies"
-    ],
-    descriptions: JSON.parse(localStorage.getItem('descriptions')) || [
-        "VAT", "Azure", "Sage", "Konsulent", "Lou-an", "Dian Expense", "PAYE/UIF", "Mongo"
-    ],
+    expenses: {},
+    companies: ["RSA", "Equisim", "Eazytask", "Muniflow", "Comzera Solutions", "Comzera Technologies"],
+    descriptions: ["VAT", "Azure", "Sage", "Konsulent", "Lou-an", "Dian Expense", "PAYE/UIF", "Mongo"],
     currentMonth: new Date().toISOString().slice(0, 7),
     selectedCompany: 'all',
-    currentView: 'summary', // Start with Dashboard
-    fyStartMonth: parseInt(localStorage.getItem('fyStartMonth')) || 2, // Default March
-    fixedExpenses: JSON.parse(localStorage.getItem('fixedExpenses')) || [], // Recurring items
-    forecast: JSON.parse(localStorage.getItem('forecast_data')) || {
-        config: { years: 3, escalation: 5, scale: 'month' },
-        items: {} 
-    },
-    pettyCash: JSON.parse(localStorage.getItem('petty_cash')) || {}, // { month: { user: { receipts: [], travel: [] } } }
-    workspaces: JSON.parse(localStorage.getItem('workspaces')) || [
-        { id: 'w_global', name: 'Global Workspace', companies: [] }
-    ],
-    users: JSON.parse(localStorage.getItem('users')) || [],
+    currentView: 'summary',
+    fyStartMonth: 2,
+    fixedExpenses: [],
+    forecast: { config: { years: 3, escalation: 5, scale: 'month' }, items: {} },
+    pettyCash: {},
+    workspaces: [{ id: 'w_global', name: 'Global Workspace', companies: [] }],
+    users: [],
     currentUser: null,
-    mileageRate: 4.50 // R4.50 per KM
+    mileageRate: 4.50,
+    currentUserId: null
 };
 
 // Selected Workspace ID
-state.selectedWorkspaceId = localStorage.getItem('selectedWorkspaceId') || 'w_global';
-
-// Data Migration & Default Setup for Email / Password
-if (state.users.length === 0) {
-    const legacyPeople = ["Lou-an", "Dian", "Antigravity"];
-    state.users = legacyPeople.map((p, idx) => ({
-        id: 'u_' + Date.now() + '_' + idx,
-        name: p,
-        email: p.toLowerCase() + '@comzera.com',
-        password: 'comzera', // default password
-        role: 'Admin', // Default legacy users to Admin
-        workspaces: ['w_global']
-    }));
-    
-    // Assign all existing companies to the Global Workspace by default
-    state.workspaces[0].companies = [...state.companies];
-    
-    // Save migrated data
-    localStorage.setItem('users', JSON.stringify(state.users));
-    localStorage.setItem('workspaces', JSON.stringify(state.workspaces));
-}
-
-// Migrate PIN users to Email/Password if they haven't been yet
-let schemaUpdated = false;
-state.users.forEach(u => {
-    if (!u.email) {
-        u.email = (u.name.toLowerCase() + '@comzera.com').replace(/\s+/g, '');
-        u.password = 'comzera';
-        schemaUpdated = true;
-    }
-});
-if (schemaUpdated) {
-    localStorage.setItem('users', JSON.stringify(state.users));
-}
-
-// Resolve current selected user
-const savedUserId = localStorage.getItem('currentUserId');
-if (savedUserId) {
-    state.currentUser = state.users.find(u => u.id === savedUserId) || null;
-}
+state.selectedWorkspaceId = 'w_global';
 
 // Access Control Helper (Now filters based on selected workspace AND user context!)
 const utils_access = {
@@ -178,7 +131,7 @@ function init() {
         fyStartSelect.value = state.fyStartMonth;
         fyStartSelect.onchange = (e) => {
             state.fyStartMonth = parseInt(e.target.value);
-            localStorage.setItem('fyStartMonth', state.fyStartMonth);
+            saveState();
             renderSummaryDashboard();
         };
     }
@@ -229,13 +182,13 @@ function init() {
                 } else {
                     state.selectedWorkspaceId = 'w_global';
                     activeWorkspaceSelect.value = 'w_global';
-                    localStorage.setItem('selectedWorkspaceId', 'w_global');
+                    saveState();
                 }
             }
             
             activeWorkspaceSelect.onchange = (e) => {
                 state.selectedWorkspaceId = e.target.value;
-                localStorage.setItem('selectedWorkspaceId', state.selectedWorkspaceId);
+                saveState();
                 
                 // Refresh entire UI context for this workspace
                 renderCompanyNav();
@@ -902,7 +855,7 @@ window.deleteUser = (userId) => {
         state.users = state.users.filter(u => u.id !== userId);
         if (state.currentUser.id === userId) {
             state.currentUser = state.users[0];
-            localStorage.setItem('currentUserId', state.currentUser.id);
+            state.currentUserId = state.currentUser.id; saveState();
         }
         saveState();
         renderSettings();
@@ -1055,12 +1008,14 @@ function renderSummaryDashboard() {
     `).join('') || '<p style="color: var(--text-muted); padding: 20px; text-align: center;">No data for this month.</p>';
 }
 function saveState() {
-    localStorage.setItem('expenses', JSON.stringify(state.expenses));
-    localStorage.setItem('companies', JSON.stringify(state.companies));
-    localStorage.setItem('descriptions', JSON.stringify(state.descriptions));
-    localStorage.setItem('forecast_data', JSON.stringify(state.forecast));
-    localStorage.setItem('workspaces', JSON.stringify(state.workspaces));
-    localStorage.setItem('users', JSON.stringify(state.users));
+    if (state.currentUser) {
+        state.currentUserId = state.currentUser.id;
+    }
+    fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+    }).catch(console.error);
 }
 
 
@@ -1752,7 +1707,7 @@ window.handleLogin = function() {
     if (user) {
         // Success!
         state.currentUser = user;
-        localStorage.setItem('currentUserId', user.id);
+        state.currentUserId = user.id; saveState();
         sessionStorage.setItem('authenticatedUserId', user.id);
         
         // Hide overlay
@@ -1803,7 +1758,7 @@ window.handleSignup = function() {
 
     // Automatically log them in
     state.currentUser = newUser;
-    localStorage.setItem('currentUserId', newUser.id);
+    state.currentUserId = newUser.id; saveState();
     sessionStorage.setItem('authenticatedUserId', newUser.id);
 
     const overlay = document.getElementById('auth-overlay');
@@ -1854,16 +1809,60 @@ window.showAuthScreen = function() {
     if (errorMsg) errorMsg.style.opacity = "0";
 };
 
-// Intercept boot check
-init();
 
-const authUserId = sessionStorage.getItem('authenticatedUserId');
-if (authUserId && state.users.some(u => u.id === authUserId)) {
-    const overlay = document.getElementById('auth-overlay');
-    if (overlay) overlay.style.display = 'none';
-} else {
-    showAuthScreen(); // Full lock on boot
+// Intercept boot check
+async function boot() {
+    try {
+        const res = await fetch('/api/state');
+        if (res.ok) {
+            const data = await res.json();
+            Object.assign(state, data);
+        }
+    } catch (e) {
+        console.error("Failed to load state", e);
+    }
+    
+    // Data Migration & Default Setup for Email / Password
+    if (state.users.length === 0) {
+        const legacyPeople = ["Lou-an", "Dian", "Antigravity"];
+        state.users = legacyPeople.map((p, idx) => ({
+            id: 'u_' + Date.now() + '_' + idx,
+            name: p,
+            email: p.toLowerCase() + '@comzera.com',
+            password: 'comzera',
+            role: 'Admin',
+            workspaces: ['w_global']
+        }));
+        if(state.workspaces[0]) state.workspaces[0].companies = [...state.companies];
+        saveState();
+    }
+
+    let schemaUpdated = false;
+    state.users.forEach(u => {
+        if (!u.email) {
+            u.email = (u.name.toLowerCase() + '@comzera.com').replace(/\s+/g, '');
+            u.password = 'comzera';
+            schemaUpdated = true;
+        }
+    });
+    if (schemaUpdated) saveState();
+
+    if (state.currentUserId) {
+        state.currentUser = state.users.find(u => u.id === state.currentUserId) || null;
+    }
+
+    init();
+
+    const authUserId = sessionStorage.getItem('authenticatedUserId');
+    if (authUserId && state.users.some(u => u.id === authUserId)) {
+        const overlay = document.getElementById('auth-overlay');
+        if (overlay) overlay.style.display = 'none';
+    } else {
+        showAuthScreen(); // Full lock on boot
+    }
 }
+boot();
+
 function downloadCSVTemplate(type) {
     let csvContent = "";
     let fileName = "";

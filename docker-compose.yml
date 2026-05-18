@@ -1,22 +1,12 @@
 version: '3.8'
 
 services:
-  api:
-    build: ./Comzera.StrategySuite.Api
-    ports:
-      - "5000:5000"
-    volumes:
-      - strategy_data:/app/data
-    restart: always
-
   web:
-    build: ./comzera-strategy-suite-web
+    build: .
     ports:
       - "3000:3000"
-    depends_on:
-      - api
-    environment:
-      - NEXT_PUBLIC_API_URL=https://your-api-domain.com/api # Overwritten in Coolify UI
+    volumes:
+      - strategy_data:/app/data
     restart: always
 
 volumes:
