@@ -1200,6 +1200,25 @@ if (expenseForm) {
         }
         if (!state.descriptions.includes(description)) state.descriptions.push(description);
         
+        // Associate company with active workspace if not already there
+        if (state.selectedWorkspaceId && state.selectedWorkspaceId !== 'w_global') {
+            const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspaceId);
+            if (activeWs) {
+                if (!activeWs.companies) activeWs.companies = [];
+                if (!activeWs.companies.includes(company)) {
+                    activeWs.companies.push(company);
+                }
+            }
+        } else if (state.selectedWorkspaceId === 'w_global') {
+            const globalWs = state.workspaces.find(w => w.id === 'w_global');
+            if (globalWs) {
+                if (!globalWs.companies) globalWs.companies = [];
+                if (!globalWs.companies.includes(company)) {
+                    globalWs.companies.push(company);
+                }
+            }
+        }
+        
         saveState();
         state.currentMonth = month;
         updateSelectors(); // Use the existing helper
@@ -1468,6 +1487,103 @@ window.updateForecastOverride = (company, type, itemIdx, monthIdx, value) => {
 };
 
 
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"' || char === "'") {
+            inQuotes = !inQuotes;
+        } else if ((char === ',' || char === ';') && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
+}
+
+function parseCSVDate(dateStr) {
+    if (!dateStr) return null;
+    
+    dateStr = dateStr.trim().replace(/^["']|["']$/g, '');
+    
+    // Try standard new Date() parsing
+    let d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+        let year = d.getFullYear();
+        if (year < 100) year += 2000;
+        let month = String(d.getMonth() + 1).padStart(2, '0');
+        let day = String(d.getDate()).padStart(2, '0');
+        return {
+            formatted: `${year}-${month}-${day}`,
+            monthKey: `${year}-${month}`
+        };
+    }
+    
+    // Fallback: match DD/MM/YYYY or DD-MM-YYYY or YYYY/MM/DD
+    const parts = dateStr.split(/[-/]/);
+    if (parts.length === 3) {
+        let year, month, day;
+        if (parts[0].length === 4) {
+            year = parseInt(parts[0]);
+            month = parseInt(parts[1]);
+            day = parseInt(parts[2]);
+        } else if (parts[2].length === 4 || parts[2].length === 2) {
+            let p0 = parseInt(parts[0]);
+            let p1 = parseInt(parts[1]);
+            let p2 = parseInt(parts[2]);
+            if (p2 < 100) p2 += 2000;
+            
+            if (p1 > 12) {
+                // MM/DD/YYYY
+                month = p0;
+                day = p1;
+                year = p2;
+            } else {
+                // DD/MM/YYYY (default)
+                day = p0;
+                month = p1;
+                year = p2;
+            }
+        }
+        
+        if (year && month && day && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            const mm = String(month).padStart(2, '0');
+            const dd = String(day).padStart(2, '0');
+            return {
+                formatted: `${year}-${mm}-${dd}`,
+                monthKey: `${year}-${mm}`
+            };
+        }
+    }
+    
+    return null;
+}
+
+function parseCSVAmount(amountStr) {
+    if (!amountStr) return 0;
+    amountStr = amountStr.trim().replace(/^["']|["']$/g, '');
+    
+    let cleaned = amountStr;
+    const lastComma = amountStr.lastIndexOf(',');
+    const lastDot = amountStr.lastIndexOf('.');
+    
+    if (lastComma > lastDot) {
+        // Comma is decimal separator.
+        cleaned = amountStr.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+        // Dot is decimal separator.
+        cleaned = amountStr.replace(/,/g, '');
+    }
+    
+    cleaned = cleaned.replace(/[^\d.-]/g, '');
+    return parseFloat(cleaned) || 0;
+}
+
 function handleBulkImport(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1475,41 +1591,73 @@ function handleBulkImport(e) {
     const reader = new FileReader();
     reader.onload = (event) => {
         const text = event.target.result;
-        const lines = text.split('\n').filter(l => l.trim());
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
         let count = 0;
+        let importedMonths = new Set();
         
         lines.forEach((line, index) => {
             // Skip header if it contains "date" or "company"
             if (index === 0 && (line.toLowerCase().includes('date') || line.toLowerCase().includes('company'))) return;
             
-            const parts = line.split(',').map(p => p.trim());
+            const parts = parseCSVLine(line);
             if (parts.length >= 4) {
                 const dateStr = parts[0];
                 const company = parts[1];
                 const description = parts[2];
-                const amount = parseFloat(parts[3].replace(/[^\d.-]/g, '')) || 0;
+                const amount = parseCSVAmount(parts[3]);
                 
                 if (!dateStr || !company || !description) return;
 
-                const month = dateStr.slice(0, 7); // YYYY-MM
+                const parsedDate = parseCSVDate(dateStr);
+                if (!parsedDate) return;
+                
+                const month = parsedDate.monthKey;
+                const formattedDate = parsedDate.formatted;
                 
                 if (!state.expenses[month]) state.expenses[month] = [];
-                state.expenses[month].push({ company, description, amount, date: dateStr, paid: false });
+                state.expenses[month].push({ company, description, amount, date: formattedDate, paid: false });
+                importedMonths.add(month);
                 
-                // Add company if new
+                // Add company if new to overall list
                 if (!state.companies.includes(company)) {
                     state.companies.push(company);
                 }
+                
+                // Associate with active workspace so user can see it!
+                if (state.selectedWorkspaceId && state.selectedWorkspaceId !== 'w_global') {
+                    const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspaceId);
+                    if (activeWs) {
+                        if (!activeWs.companies) activeWs.companies = [];
+                        if (!activeWs.companies.includes(company)) {
+                            activeWs.companies.push(company);
+                        }
+                    }
+                } else if (state.selectedWorkspaceId === 'w_global') {
+                    const globalWs = state.workspaces.find(w => w.id === 'w_global');
+                    if (globalWs) {
+                        if (!globalWs.companies) globalWs.companies = [];
+                        if (!globalWs.companies.includes(company)) {
+                            globalWs.companies.push(company);
+                        }
+                    }
+                }
+                
                 count++;
             }
         });
         
-        saveState();
-        renderCompanyNav();
-        renderDashboard();
-        updateDataLists();
-        updateForecastCompanySelect();
-        alert(`Success! Imported ${count} transactions across multiple companies.`);
+        if (count > 0) {
+            saveState();
+            renderCompanyNav();
+            renderDashboard();
+            updateDataLists();
+            updateForecastCompanySelect();
+            
+            const monthsList = Array.from(importedMonths).sort();
+            alert(`Success! Imported ${count} transactions across multiple companies.\nTarget Month(s): ${monthsList.join(', ')}`);
+        } else {
+            alert("No valid data rows found in the CSV. Please check the file format (Date, Company, Description, Amount) and ensure date/amount formats are correct.");
+        }
         e.target.value = ''; // Reset
     };
     reader.readAsText(file);
